@@ -1,0 +1,412 @@
+import React, { useState } from 'react';
+import { parseRawTaskText } from '../features/task-parser/utils/parser';
+import ResultCard from '../features/task-parser/components/ResultCard';
+import MapComponent from '../features/map-view/MapComponent';
+import { translateTaskFields } from '../features/translator/services/deeplService';
+import { smartLocalizeTaskFields } from '../features/localizer/services/geminiLocalizeService';
+
+import { db } from '../services/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+
+const THEME_COLORS = ['#6f42c1', '#007bff', '#28a745', '#dc3545', '#ffc107'];
+
+const SUPPORTED_LANGUAGES = [
+  { code: 'EN-US', name: 'English' },
+  { code: 'ML', name: 'Malayalam' },
+  { code: 'TA', name: 'Tamil' },
+  { code: 'HI', name: 'Hindi' },
+  { code: 'ES', name: 'Spanish' },
+];
+
+const Dashboard = () => {
+  const [rawData, setRawData] = useState('');
+
+  const [originalTask, setOriginalTask] = useState(null);
+  const [translatedTask, setTranslatedTask] = useState(null);
+  const [smartLocalizedTask, setSmartLocalizedTask] = useState(null);
+  const [viewMode, setViewMode] = useState('original');
+
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [isSmartLocalizing, setIsSmartLocalizing] = useState(false);
+  const [detectedLang, setDetectedLang] = useState('');
+  const [transError, setTransError] = useState('');
+  const [targetLang, setTargetLang] = useState('EN-US');
+  const [spellingIssues, setSpellingIssues] = useState([]);
+
+  const [isCached, setIsCached] = useState(false);
+  const [isCheckingDB, setIsCheckingDB] = useState(false);
+
+  const [showDbModal, setShowDbModal] = useState(false);
+  const [pendingDbData, setPendingDbData] = useState(null);
+  const [pendingExtractedData, setPendingExtractedData] = useState(null);
+
+  const resetTaskState = () => {
+    setOriginalTask(null);
+    setTranslatedTask(null);
+    setSmartLocalizedTask(null);
+    setSpellingIssues([]);
+    setRawData('');
+    setIsCached(false);
+    setDetectedLang('');
+    setTransError('');
+    setViewMode('original');
+  };
+
+  const handleProcessTask = async () => {
+    if (!rawData.trim()) return;
+
+    setIsCheckingDB(true);
+    setTransError('');
+
+    try {
+      const extractedData = parseRawTaskText(rawData);
+
+      if (extractedData.requestId && extractedData.requestId !== 'N/A') {
+        const docRef = doc(db, 'tasks', extractedData.requestId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          setPendingDbData(docSnap.data());
+          setPendingExtractedData(extractedData);
+          setShowDbModal(true);
+          setIsCheckingDB(false);
+          return;
+        }
+      }
+
+      setOriginalTask(extractedData);
+      setTranslatedTask(null);
+      setSmartLocalizedTask(null);
+      setSpellingIssues([]);
+      setViewMode('original');
+      setIsCached(false);
+      setDetectedLang('');
+    } catch (err) {
+      console.error(err);
+      setTransError('Failed to parse task data.');
+    } finally {
+      setIsCheckingDB(false);
+    }
+  };
+
+  const handleAcceptDb = () => {
+    if (pendingDbData.translatedData || pendingDbData.smartLocalizedData) {
+      setOriginalTask(pendingDbData.originalData || pendingDbData);
+      setTranslatedTask(pendingDbData.translatedData || null);
+      setSmartLocalizedTask(pendingDbData.smartLocalizedData || null);
+      setSpellingIssues(pendingDbData.spellingIssues || []);
+      setDetectedLang(pendingDbData.detectedLang || '');
+
+      if (pendingDbData.smartLocalizedData) {
+        setViewMode('smartLocalized');
+      } else if (pendingDbData.translatedData) {
+        setViewMode('translated');
+      } else {
+        setViewMode('original');
+      }
+    } else {
+      setOriginalTask(pendingDbData);
+      setTranslatedTask(null);
+      setSmartLocalizedTask(null);
+      setSpellingIssues([]);
+      setViewMode('original');
+    }
+
+    setIsCached(true);
+    setShowDbModal(false);
+  };
+
+  const handleRejectDb = () => {
+    setOriginalTask(pendingExtractedData);
+    setTranslatedTask(null);
+    setSmartLocalizedTask(null);
+    setSpellingIssues([]);
+    setViewMode('original');
+    setIsCached(false);
+    setDetectedLang('');
+    setShowDbModal(false);
+  };
+
+  const handleTranslate = async () => {
+    if (!originalTask) return;
+
+    setIsTranslating(true);
+    setTransError('');
+
+    try {
+      const textsToTranslate = [originalTask.query || ''];
+
+      originalTask.results.forEach((res) => {
+        textsToTranslate.push(res.title || '');
+        textsToTranslate.push(res.address || '');
+        textsToTranslate.push(res.category || '');
+      });
+
+      const { translations, detectedSourceLanguage } = await translateTaskFields(
+        textsToTranslate,
+        targetLang
+      );
+
+      let ptr = 0;
+
+      const newTranslatedTask = {
+        ...originalTask,
+        query: translations[ptr++],
+        results: originalTask.results.map((res) => ({
+          ...res,
+          title: translations[ptr++],
+          address: translations[ptr++],
+          category: translations[ptr++],
+        })),
+      };
+
+      setTranslatedTask(newTranslatedTask);
+      setDetectedLang(detectedSourceLanguage);
+      setViewMode('translated');
+
+      if (newTranslatedTask.requestId && newTranslatedTask.requestId !== 'N/A') {
+        try {
+          await setDoc(doc(db, 'tasks', newTranslatedTask.requestId), {
+            originalData: originalTask,
+            translatedData: newTranslatedTask,
+            smartLocalizedData: smartLocalizedTask || null,
+            spellingIssues,
+            detectedLang: detectedSourceLanguage,
+          }, { merge: true });
+
+          setIsCached(true);
+        } catch (dbErr) {
+          console.error('Failed to save translated data to Firebase:', dbErr);
+        }
+      }
+    } catch (err) {
+      setTransError(err.message);
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  const handleSmartLocalize = async () => {
+    if (!originalTask) return;
+
+    setIsSmartLocalizing(true);
+    setTransError('');
+
+    try {
+      const textsToLocalize = [originalTask.query || ''];
+
+      originalTask.results.forEach((res) => {
+        textsToLocalize.push(res.title || '');
+        textsToLocalize.push(res.address || '');
+        textsToLocalize.push(res.category || '');
+        textsToLocalize.push(res.type || '');
+        textsToLocalize.push(res.status || '');
+      });
+
+      const {
+        localizedTexts,
+        spellingIssues: aiSpellingIssues,
+      } = await smartLocalizeTaskFields(textsToLocalize, 'AUTO');
+
+      let ptr = 0;
+
+      const newSmartLocalizedTask = {
+        ...originalTask,
+        query: localizedTexts[ptr++],
+        results: originalTask.results.map((res) => ({
+          ...res,
+          title: localizedTexts[ptr++],
+          address: localizedTexts[ptr++],
+          category: localizedTexts[ptr++],
+          type: localizedTexts[ptr++],
+          status: localizedTexts[ptr++],
+        })),
+      };
+
+      setSmartLocalizedTask(newSmartLocalizedTask);
+      setSpellingIssues(aiSpellingIssues || []);
+      setViewMode('smartLocalized');
+
+      if (newSmartLocalizedTask.requestId && newSmartLocalizedTask.requestId !== 'N/A') {
+        try {
+          await setDoc(doc(db, 'tasks', newSmartLocalizedTask.requestId), {
+            originalData: originalTask,
+            translatedData: translatedTask || null,
+            smartLocalizedData: newSmartLocalizedTask,
+            spellingIssues: aiSpellingIssues || [],
+            detectedLang,
+          }, { merge: true });
+
+          setIsCached(true);
+        } catch (dbErr) {
+          console.error('Failed to save smart localized data to Firebase:', dbErr);
+        }
+      }
+    } catch (err) {
+      console.error('AI localization failed:', err);
+      setTransError(err.message || 'AI localization failed.');
+    } finally {
+      setIsSmartLocalizing(false);
+    }
+  };
+
+  const activeTask =
+    viewMode === 'translated' && translatedTask
+      ? translatedTask
+      : viewMode === 'smartLocalized' && smartLocalizedTask
+        ? smartLocalizedTask
+        : originalTask;
+
+  return (
+    <div style={{ fontFamily: 'Segoe UI, sans-serif', backgroundColor: '#f0f2f5', minHeight: '100vh', margin: 0, padding: 0 }}>
+      {showDbModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', maxWidth: '400px', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ marginTop: 0 }}>Task Found in Database</h3>
+            <p style={{ color: '#555', marginBottom: '25px' }}>This Request ID has already been processed previously. Would you like to load the saved data?</p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button onClick={handleRejectDb} style={{ padding: '10px 15px', border: '1px solid #ccc', backgroundColor: '#f8f9fa', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Ignore & Use New Paste</button>
+              <button onClick={handleAcceptDb} style={{ padding: '10px 15px', border: 'none', backgroundColor: '#0d6efd', color: 'white', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Load from Database</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ backgroundColor: '#1a1a2e', color: 'white', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: '16px', fontWeight: 'bold' }}>Rating Workflow Dashboard</div>
+        {originalTask && (
+          <button onClick={resetTaskState} style={{ backgroundColor: '#e94560', color: 'white', border: 'none', padding: '6px 12px', cursor: 'pointer', borderRadius: '4px' }}>
+            Reset Interface
+          </button>
+        )}
+      </div>
+
+      {!originalTask ? (
+        <div style={{ maxWidth: '800px', margin: '40px auto', padding: '20px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+          <h2 style={{ marginTop: 0 }}>Paste Task Data</h2>
+
+          <textarea
+            rows="12"
+            value={rawData}
+            onChange={(e) => setRawData(e.target.value)}
+            style={{ width: '100%', padding: '12px', border: '1px solid #ccc', fontFamily: 'monospace' }}
+          />
+
+          <button onClick={handleProcessTask} disabled={isCheckingDB} style={{ width: '100%', padding: '12px', marginTop: '15px', backgroundColor: '#0f3460', color: 'white', cursor: isCheckingDB ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
+            {isCheckingDB ? 'Checking Database...' : 'Extract & Build Layout'}
+          </button>
+
+          {transError && <p style={{ color: '#dc3545', fontWeight: 'bold' }}>{transError}</p>}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', height: 'calc(100vh - 45px)' }}>
+          <div style={{ width: '45%', borderRight: '2px solid #ccc', position: 'relative' }}>
+            <MapComponent userLatLng={activeTask.userLatLng} results={activeTask.results} resultColors={THEME_COLORS} />
+          </div>
+
+          <div style={{ width: '55%', backgroundColor: 'white', overflowY: 'auto', padding: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#e3f2fd', padding: '10px 15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #b6d4fe', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                {isCached && <span style={{ fontSize: '13px', color: '#198754', fontWeight: 'bold', marginRight: '5px', backgroundColor: '#d1e7dd', padding: '4px 8px', borderRadius: '4px' }}>DB Archive</span>}
+
+                <select value={targetLang} onChange={(e) => setTargetLang(e.target.value)} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <option key={lang.code} value={lang.code}>{lang.name}</option>
+                  ))}
+                </select>
+
+                <button onClick={handleTranslate} disabled={isTranslating} style={{ backgroundColor: '#0d6efd', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: isTranslating ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
+                  {isTranslating ? 'Translating...' : 'Translate'}
+                </button>
+
+                <button
+                  onClick={handleSmartLocalize}
+                  disabled={isSmartLocalizing}
+                  style={{
+                    backgroundColor: '#6f42c1',
+                    color: 'white',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '4px',
+                    cursor: isSmartLocalizing ? 'not-allowed' : 'pointer',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {isSmartLocalizing ? 'Checking...' : 'Smart English'}
+                </button>
+
+                {detectedLang && <span style={{ fontSize: '13px', color: '#084298', fontWeight: 'bold', marginLeft: '5px' }}>{detectedLang}</span>}
+              </div>
+
+              <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '4px', border: '1px solid #ccc', overflow: 'hidden' }}>
+                <button onClick={() => setViewMode('original')} style={{ padding: '6px 12px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: viewMode === 'original' ? '#0f3460' : 'transparent', color: viewMode === 'original' ? 'white' : '#555' }}>
+                  Raw Data
+                </button>
+
+                <button onClick={() => setViewMode('translated')} disabled={!translatedTask} style={{ padding: '6px 12px', border: 'none', cursor: translatedTask ? 'pointer' : 'not-allowed', fontWeight: 'bold', backgroundColor: viewMode === 'translated' && translatedTask ? '#0f3460' : 'transparent', color: viewMode === 'translated' && translatedTask ? 'white' : '#aaa' }}>
+                  Translated
+                </button>
+
+                <button onClick={() => setViewMode('smartLocalized')} disabled={!smartLocalizedTask} style={{ padding: '6px 12px', border: 'none', cursor: smartLocalizedTask ? 'pointer' : 'not-allowed', fontWeight: 'bold', backgroundColor: viewMode === 'smartLocalized' && smartLocalizedTask ? '#0f3460' : 'transparent', color: viewMode === 'smartLocalized' && smartLocalizedTask ? 'white' : '#aaa' }}>
+                  Smart English
+                </button>
+              </div>
+            </div>
+
+            {transError && <p style={{ color: '#dc3545', fontWeight: 'bold' }}>{transError}</p>}
+
+            {viewMode === 'smartLocalized' && spellingIssues.length > 0 && (
+  <div style={{
+    backgroundColor: '#fff3cd',
+    border: '1px solid #ffecb5',
+    color: '#664d03',
+    padding: '10px 12px',
+    borderRadius: '6px',
+    marginBottom: '15px',
+    fontSize: '13px',
+    fontWeight: 'bold'
+  }}>
+    {spellingIssues.length} possible spelling {spellingIssues.length === 1 ? 'issue' : 'issues'} found
+  </div>
+)}
+
+            <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #e9ecef', fontSize: '13px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ddd', paddingBottom: '10px', marginBottom: '10px' }}>
+                <div><strong>Task Type:</strong> {activeTask.taskType}</div>
+                <div><strong>Request ID:</strong> {activeTask.requestId}</div>
+                <div><strong>Time:</strong> {activeTask.estimatedTime}</div>
+              </div>
+              <div style={{ margin: '6px 0' }}>
+                <strong>Query:</strong>{' '}
+                <span style={{ color: '#0f3460', fontWeight: 'bold', fontSize: '15px' }}>{activeTask.query}</span>
+              </div>
+            </div>
+
+            {activeTask.results.map((result, idx) => {
+  const baseIndex = 1 + idx * 5;
+
+  const issuesForResult = {
+    title: spellingIssues.find((issue) => issue.inputIndex === baseIndex),
+    address: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 1),
+    category: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 2),
+    type: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 3),
+    status: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 4),
+  };
+
+  return (
+    <ResultCard
+      key={idx}
+      result={result}
+      color={THEME_COLORS[idx % THEME_COLORS.length]}
+      spellingIssues={viewMode === 'smartLocalized' ? issuesForResult : {}}
+    />
+  );
+})}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Dashboard;
