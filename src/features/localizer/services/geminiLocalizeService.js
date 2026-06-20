@@ -1,14 +1,29 @@
 export const smartLocalizeTaskFields = async (textArray, sourceLangCode = 'AUTO') => {
-  const response = await fetch('/api/smart-localize', {
+  const response = await fetch('/api/gemini-localize', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ textArray, sourceLangCode }),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      textArray,
+      sourceLangCode,
+    }),
   });
 
-  const data = await response.json();
+  const responseText = await response.text();
+
+  let data;
+
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    throw new Error(
+      `AI localization returned non-JSON response: ${response.status} ${responseText.slice(0, 200)}`
+    );
+  }
 
   if (!response.ok) {
-    throw new Error(data.error || 'AI localization failed');
+    throw new Error(data.error || `AI localization failed: ${response.status}`);
   }
 
   return {
