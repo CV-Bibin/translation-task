@@ -9,87 +9,159 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Gemini API key is missing' });
   }
 
-  const { textArray, sourceLangCode } = req.body;
+  const { textArray, sourceLangCode, protectedTerms = [] } = req.body;
 
   if (!Array.isArray(textArray)) {
     return res.status(400).json({ error: 'textArray must be an array' });
   }
 
+  const fieldTypeForIndex = (index) => {
+    if (index === 0) return 'query';
+
+    const offset = (index - 1) % 5;
+
+    if (offset === 0) return 'title';
+    if (offset === 1) return 'address';
+    if (offset === 2) return 'category';
+    if (offset === 3) return 'type';
+    if (offset === 4) return 'status';
+
+    return 'unknown';
+  };
+
+  const inputItems = textArray.map((text, index) => ({
+    index,
+    fieldType: fieldTypeForIndex(index),
+    text: String(text || ''),
+  }));
+
   const prompt = `
-You are an expert TryRating map localization, transliteration, and spelling review assistant.
+You are an expert Indian map task localization assistant for TryRating tasks.
 
-Input is a JSON array of map task strings.
-The source language code is: ${sourceLangCode || 'AUTO'}.
-The source language may be Malayalam, Tamil, Hindi, Spanish, English, or mixed.
+Your job is NOT normal translation.
+Your job is smart English localization for map rating.
 
-Input array order:
-- index 0 is the query.
-- Starting from index 1, every result has exactly 5 fields in this order:
-  title, address, category, type, status.
-- Example:
-  index 1 = result 1 title
-  index 2 = result 1 address
-  index 3 = result 1 category
-  index 4 = result 1 type
-  index 5 = result 1 status
-  index 6 = result 2 title
-  index 7 = result 2 address
-  index 8 = result 2 category
-  index 9 = result 2 type
-  index 10 = result 2 status
+Source language code: ${sourceLangCode || 'AUTO'}.
+Possible languages: Malayalam, Tamil, Hindi, Spanish, English, or mixed text.
 
-Return ONLY valid JSON in this exact shape:
+Input is a JSON array of objects.
+Each object has:
+- index
+- fieldType
+- text
+
+Field behavior:
+
+1. query
+- Smart localize into English.
+- Preserve brand names, place names, and POI names.
+- Translate generic map terms.
+- Example: "പ്രസ്റ്റീജ് പ്ലൈവുഡ്" -> "Prestige Plywood"
+- Example: "എരிபொர" may be an incomplete typed query for "Fuel".
+
+2. title
+- This is a business/place/POI name.
+- Do not literally translate brand names, shop names, building names, road names, person names, or local place names.
+- Use common English spelling if obvious.
+- Transliterate names naturally.
+- Translate only generic business terms when they are clearly part of the common English name.
+- Example: "പ്രെസ്റ്റീജ് പ്ലൈവുഡ് ഇൻഡസ്ട്രീസ്" -> "Prestige Plywood Industries"
+- Example: "ഇന്ത്യൻ ഓയിൽ പെട്രോൾ പമ്പ്" -> "Indian Oil Petrol Pump"
+- Bad: "Indian Oil Fuel Pump" if the common Indian term is Petrol Pump.
+
+3. address
+- Do NOT fully translate addresses.
+- Transliterate/localize address parts into readable English.
+- Preserve order, numbers, postal codes, coordinates, punctuation, and structure.
+- Translate only common administrative/geographic terms when natural.
+- Example: "ആലുവ മൂന്നാർ റോഡ്, മുടിക്കൽ, പെരുമ്പാവൂർ, കേരള, ഭാരതം"
+  -> "Aluva Munnar Road, Mudickal, Perumbavoor, Kerala, India"
+- Do not invent missing address parts.
+- Do not remove locality names.
+
+4. category
+- Translate the meaning into natural Indian map English.
+- Do not transliterate category names.
+- Example: "പെട്രോൾ പമ്പ്" -> "Petrol Pump"
+- Example: "எரிபொருள் நிலையம்" -> "Petrol Pump" or "Fuel Station", prefer "Petrol Pump" for India.
+
+5. type
+- Normalize to English.
+- If already English like BUSINESS, keep it.
+
+6. status
+- Translate status meaning into English.
+- If empty, keep empty.
+- Do not invent open/closed status.
+
+Protected terms:
+${JSON.stringify(protectedTerms)}
+
+If a protected term or obvious brand/place name appears, preserve its common English form.
+
+Return ONLY valid JSON.
+No markdown.
+No explanation outside JSON.
+
+Exact JSON shape:
 
 {
-  "localizedTexts": ["same length as input array"],
+  "localizedTexts": [
+    "same length as input array, item at same index"
+  ],
   "spellingIssues": [
     {
       "inputIndex": 0,
       "fieldType": "query | title | address | category | type | status",
-      "originalWord": "exact word from original input",
-      "actualTransliteration": "roman transliteration of the original word",
-      "suggestedWord": "correct source-language word or corrected English phrase",
+      "originalWord": "exact word or phrase from original input",
+      "actualTransliteration": "roman transliteration of originalWord",
+      "suggestedWord": "correct source-language word, corrected transliteration, or corrected English phrase",
+      "severity": "high | medium | low",
       "reason": "short reason"
+    }
+  ],
+  "fieldNotes": [
+    {
+      "inputIndex": 0,
+      "fieldType": "query | title | address | category | type | status",
+      "mode": "translated | transliterated | preserved_brand | preserved_place | normalized | unchanged",
+      "preservedTerms": ["terms preserved in English"],
+      "confidence": "high | medium | low"
     }
   ]
 }
 
-Localization rules:
-1. localizedTexts must be clean English for map rating.
-2. localizedTexts must have exactly the same number of items as the input array.
-3. For title, address, and query:
-   - Use smart English localization.
-   - Brand names, shop names, road names, building names, person names, and place names should use their common English spelling when obvious.
-   - Example: "ഇന്ത്യൻ ഓയിൽ" -> "Indian Oil".
-   - Example: "പെട്രോൾ പമ്പ്" -> "Petrol Pump".
-4. For category, type, and status fields:
-   - Always translate the meaning into English.
-   - Do not transliterate category/type/status.
-   - Example category "പെട്രോൾ പമ്പ്" -> "Petrol Pump".
-   - Example status meaning open/closed/operational should be translated to English.
-5. Keep Indian map terms natural:
+Important output rules:
+1. localizedTexts length must exactly match input length.
+2. localizedTexts[index] must correspond to input item with same index.
+3. Empty input text must return empty output text.
+4. Never invent missing data.
+5. Do not add comments inside localizedTexts.
+6. Keep Indian map wording natural:
    - Use "Petrol Pump", not "Gas Station".
-   - Use "Medical Store" or "Pharmacy" when appropriate.
-6. Preserve numbers, postal codes, coordinates, punctuation, and address structure.
+   - Use "Medical Store" or "Pharmacy" depending on context.
+   - Use "Bus Stand", "Railway Station", "Junction", "Road", "Street" naturally.
+7. Preserve local names unless there is a well-known English spelling.
 
 Spelling review rules:
-1. Check every input string independently before finalizing localizedTexts.
-2. Do not silently correct spelling mistakes. If localizedTexts corrects a misspelled source word, spellingIssues must include that word.
-3. Report only real or highly likely spelling mistakes. Do not report acceptable variant spellings, valid local spellings, abbreviations, transliteration differences, or alternate brand spellings as errors.
-4. Do not create false errors for normal Malayalam/Tamil/Hindi spelling, common local abbreviations, or valid mixed-language business names.
-5. Do not report grammar/style differences. Report only spelling issues that affect a word/name/category/map term.
-6. If a source word is likely a misspelled version of a common map/business term, report it.
-7. Be strict for common map/business terms including petrol, pump, hotel, restaurant, hospital, clinic, pharmacy, medical store, school, college, bank, ATM, temple, mosque, church, supermarket, market, bakery, bus stand, railway station, airport, road, street, junction.
-8. Check titles more carefully than addresses, because title spelling errors are more important.
-9. If you are unsure whether a word is wrong or just a valid local name, do not report it.
-10. Return all spelling issues found. Do not stop after the first issue.
-11. inputIndex must be the exact array index where the issue was found.
-12. fieldType must match the field type for that inputIndex.
-13. If there are no spelling issues, return an empty spellingIssues array.
-14. Return only JSON. No markdown.
+1. Check every input independently.
+2. Report only real or highly likely spelling mistakes.
+3. Do not report valid local spellings, valid transliteration variants, abbreviations, initials, or unknown local names.
+4. Do not report grammar/style issues.
+5. Be stricter for title, query, and category.
+6. Be careful with addresses: many address words are local place names, not spelling mistakes.
+7. If unsure whether a word is wrong or a valid local name, do not report it.
+8. If localizedTexts corrects a likely misspelled source word, spellingIssues must include it.
+9. Report all likely spelling issues, not only the first one.
+10. severity:
+   - high: common map/business term clearly misspelled
+   - medium: likely typo in POI/category/query
+   - low: possible but uncertain typo
+11. inputIndex must be exact.
+12. fieldType must match the provided fieldType.
 
-Input JSON array:
-${JSON.stringify(textArray)}
+Input:
+${JSON.stringify(inputItems)}
 `;
 
   try {
@@ -117,19 +189,79 @@ ${JSON.stringify(textArray)}
     let resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
     resultText = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
 
-    const parsed = JSON.parse(resultText);
+    let parsed;
 
-    const localizedTexts = Array.isArray(parsed.localizedTexts)
-      ? parsed.localizedTexts
+    try {
+      parsed = JSON.parse(resultText);
+    } catch {
+      return res.status(502).json({
+        error: 'Gemini returned invalid JSON',
+      });
+    }
+
+    let localizedTexts = Array.isArray(parsed.localizedTexts)
+      ? parsed.localizedTexts.map((item) => String(item ?? ''))
       : [];
+
+    if (localizedTexts.length !== textArray.length) {
+      localizedTexts = textArray.map((item) => String(item || ''));
+    }
+
+    const allowedFieldTypes = new Set([
+      'query',
+      'title',
+      'address',
+      'category',
+      'type',
+      'status',
+    ]);
+
+    const allowedSeverities = new Set(['high', 'medium', 'low']);
 
     const spellingIssues = Array.isArray(parsed.spellingIssues)
       ? parsed.spellingIssues
+          .filter((issue) => (
+            Number.isInteger(issue.inputIndex) &&
+            issue.inputIndex >= 0 &&
+            issue.inputIndex < textArray.length &&
+            allowedFieldTypes.has(issue.fieldType)
+          ))
+          .map((issue) => ({
+            inputIndex: issue.inputIndex,
+            fieldType: issue.fieldType,
+            originalWord: String(issue.originalWord || ''),
+            actualTransliteration: String(issue.actualTransliteration || ''),
+            suggestedWord: String(issue.suggestedWord || ''),
+            severity: allowedSeverities.has(issue.severity) ? issue.severity : 'medium',
+            reason: String(issue.reason || ''),
+          }))
+      : [];
+
+    const fieldNotes = Array.isArray(parsed.fieldNotes)
+      ? parsed.fieldNotes
+          .filter((note) => (
+            Number.isInteger(note.inputIndex) &&
+            note.inputIndex >= 0 &&
+            note.inputIndex < textArray.length &&
+            allowedFieldTypes.has(note.fieldType)
+          ))
+          .map((note) => ({
+            inputIndex: note.inputIndex,
+            fieldType: note.fieldType,
+            mode: String(note.mode || ''),
+            preservedTerms: Array.isArray(note.preservedTerms)
+              ? note.preservedTerms.map((term) => String(term))
+              : [],
+            confidence: ['high', 'medium', 'low'].includes(note.confidence)
+              ? note.confidence
+              : 'medium',
+          }))
       : [];
 
     return res.status(200).json({
       localizedTexts,
       spellingIssues,
+      fieldNotes,
     });
   } catch (err) {
     return res.status(500).json({
