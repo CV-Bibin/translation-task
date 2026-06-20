@@ -56,8 +56,9 @@ Field behavior:
 - Smart localize into English.
 - Preserve brand names, place names, and POI names.
 - Translate generic map terms.
+- Autocomplete queries may be incomplete typed text. Do not treat incomplete query text as a spelling mistake.
 - Example: "പ്രസ്റ്റീജ് പ്ലൈവുഡ്" -> "Prestige Plywood"
-- Example: "എരிபொர" may be an incomplete typed query for "Fuel".
+- Example: "எரிபொர" may be an incomplete typed query for "Fuel".
 
 2. title
 - This is a business/place/POI name.
@@ -74,7 +75,7 @@ Field behavior:
 - Transliterate/localize address parts into readable English.
 - Preserve order, numbers, postal codes, coordinates, punctuation, and structure.
 - Translate only common administrative/geographic terms when natural.
-- Example: "ആലുവ മൂന്നാർ റോഡ്, മുടിക്കൽ, പെരുമ്പാവൂർ, കേരള, ഭാരതം"
+- Example: "ஆலுவா மூன்றார் ரோடு, முடிக்கல், பெரும்பாவூர், கேரளா, பாரதம்"
   -> "Aluva Munnar Road, Mudickal, Perumbavoor, Kerala, India"
 - Do not invent missing address parts.
 - Do not remove locality names.
@@ -106,14 +107,23 @@ No explanation outside JSON.
 Exact JSON shape:
 
 {
+  "detectedSourceLanguage": "TA | ML | HI | ES | EN | MIXED | UNKNOWN",
   "localizedTexts": [
     "same length as input array, item at same index"
+  ],
+  "fieldLanguages": [
+    {
+      "inputIndex": 0,
+      "fieldType": "query | title | address | category | type | status",
+      "languages": ["Tamil"],
+      "languageCodes": ["TA"]
+    }
   ],
   "spellingIssues": [
     {
       "inputIndex": 0,
       "fieldType": "query | title | address | category | type | status",
-      "originalWord": "exact word or phrase from original input",
+      "originalWord": "exact word or phrase copied from original input",
       "actualTransliteration": "roman transliteration of originalWord",
       "suggestedWord": "correct source-language word, corrected transliteration, or corrected English phrase",
       "severity": "high | medium | low",
@@ -142,6 +152,11 @@ Important output rules:
    - Use "Medical Store" or "Pharmacy" depending on context.
    - Use "Bus Stand", "Railway Station", "Junction", "Road", "Street" naturally.
 7. Preserve local names unless there is a well-known English spelling.
+8. Detect the language or languages present in each field.
+9. If a field contains English plus an Indian language, include both.
+10. If text is empty, languages and languageCodes should be empty arrays.
+11. For detectedSourceLanguage, use MIXED if multiple major languages are present.
+12. Use these language codes only when possible: TA, ML, HI, ES, EN, UNKNOWN.
 
 Spelling review rules:
 1. Check every input independently.
@@ -153,12 +168,14 @@ Spelling review rules:
 7. If unsure whether a word is wrong or a valid local name, do not report it.
 8. If localizedTexts corrects a likely misspelled source word, spellingIssues must include it.
 9. Report all likely spelling issues, not only the first one.
-10. severity:
+10. Do not report incomplete typed autocomplete queries as spelling mistakes.
+11. originalWord must be copied exactly from the input text.
+12. severity:
    - high: common map/business term clearly misspelled
    - medium: likely typo in POI/category/query
    - low: possible but uncertain typo
-11. inputIndex must be exact.
-12. fieldType must match the provided fieldType.
+13. inputIndex must be exact.
+14. fieldType must match the provided fieldType.
 
 Input:
 ${JSON.stringify(inputItems)}
@@ -217,6 +234,35 @@ ${JSON.stringify(inputItems)}
     ]);
 
     const allowedSeverities = new Set(['high', 'medium', 'low']);
+    const allowedLanguageCodes = new Set(['TA', 'ML', 'HI', 'ES', 'EN', 'MIXED', 'UNKNOWN']);
+
+    const detectedSourceLanguageRaw = String(
+      parsed.detectedSourceLanguage || sourceLangCode || 'UNKNOWN'
+    ).toUpperCase();
+
+    const detectedSourceLanguage = allowedLanguageCodes.has(detectedSourceLanguageRaw)
+      ? detectedSourceLanguageRaw
+      : 'UNKNOWN';
+
+    const fieldLanguages = Array.isArray(parsed.fieldLanguages)
+      ? parsed.fieldLanguages
+          .filter((item) => (
+            Number.isInteger(item.inputIndex) &&
+            item.inputIndex >= 0 &&
+            item.inputIndex < textArray.length &&
+            allowedFieldTypes.has(item.fieldType)
+          ))
+          .map((item) => ({
+            inputIndex: item.inputIndex,
+            fieldType: item.fieldType,
+            languages: Array.isArray(item.languages)
+              ? item.languages.map((lang) => String(lang))
+              : [],
+            languageCodes: Array.isArray(item.languageCodes)
+              ? item.languageCodes.map((code) => String(code).toUpperCase())
+              : [],
+          }))
+      : [];
 
     const spellingIssues = Array.isArray(parsed.spellingIssues)
       ? parsed.spellingIssues
@@ -235,6 +281,10 @@ ${JSON.stringify(inputItems)}
             severity: allowedSeverities.has(issue.severity) ? issue.severity : 'medium',
             reason: String(issue.reason || ''),
           }))
+          .filter((issue) => {
+            const sourceText = String(textArray[issue.inputIndex] || '');
+            return issue.originalWord && sourceText.includes(issue.originalWord);
+          })
       : [];
 
     const fieldNotes = Array.isArray(parsed.fieldNotes)
@@ -262,6 +312,8 @@ ${JSON.stringify(inputItems)}
       localizedTexts,
       spellingIssues,
       fieldNotes,
+      fieldLanguages,
+      detectedSourceLanguage,
     });
   } catch (err) {
     return res.status(500).json({
