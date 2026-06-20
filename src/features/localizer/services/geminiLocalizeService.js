@@ -27,10 +27,11 @@ export const smartLocalizeTaskFields = async (textArray, sourceLangCode = 'AUTO'
   }
 
   return {
-    localizedTexts: data.localizedTexts || [],
-    spellingIssues: data.spellingIssues || [],
-    fieldNotes: data.fieldNotes || [],
-    fieldLanguages: data.fieldLanguages || [],
-    detectedSourceLanguage: data.detectedSourceLanguage || '',
-  };
+  localizedTexts: data.localizedTexts || [],
+  transliteratedTexts: data.transliteratedTexts || [],
+  spellingIssues: data.spellingIssues || [],
+  fieldNotes: data.fieldNotes || [],
+  fieldLanguages: data.fieldLanguages || [],
+  detectedSourceLanguage: data.detectedSourceLanguage || '',
+};
 };

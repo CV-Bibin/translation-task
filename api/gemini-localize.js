@@ -75,7 +75,7 @@ Field behavior:
 - Transliterate/localize address parts into readable English.
 - Preserve order, numbers, postal codes, coordinates, punctuation, and structure.
 - Translate only common administrative/geographic terms when natural.
-- Example: "ஆலுவா மூன்றார் ரோடு, முடிக்கல், பெரும்பாவூர், கேரளா, பாரதம்"
+- Example: "ആലുവ മൂന്നാർ റോഡ്, മുടിക്കൽ, പെരുമ്പാവൂർ, കേരള, ഭാരതം"
   -> "Aluva Munnar Road, Mudickal, Perumbavoor, Kerala, India"
 - Do not invent missing address parts.
 - Do not remove locality names.
@@ -111,6 +111,9 @@ Exact JSON shape:
   "localizedTexts": [
     "same length as input array, item at same index"
   ],
+  "transliteratedTexts": [
+    "same length as input array, roman readable form of original input text at same index"
+  ],
   "fieldLanguages": [
     {
       "inputIndex": 0,
@@ -144,19 +147,34 @@ Exact JSON shape:
 Important output rules:
 1. localizedTexts length must exactly match input length.
 2. localizedTexts[index] must correspond to input item with same index.
-3. Empty input text must return empty output text.
-4. Never invent missing data.
-5. Do not add comments inside localizedTexts.
-6. Keep Indian map wording natural:
+3. transliteratedTexts length must exactly match input length.
+4. transliteratedTexts[index] must correspond to input item with same index.
+5. Empty input text must return empty output text in both localizedTexts and transliteratedTexts.
+6. Never invent missing data.
+7. Do not add comments inside localizedTexts or transliteratedTexts.
+8. Keep Indian map wording natural:
    - Use "Petrol Pump", not "Gas Station".
    - Use "Medical Store" or "Pharmacy" depending on context.
    - Use "Bus Stand", "Railway Station", "Junction", "Road", "Street" naturally.
-7. Preserve local names unless there is a well-known English spelling.
-8. Detect the language or languages present in each field.
-9. If a field contains English plus an Indian language, include both.
-10. If text is empty, languages and languageCodes should be empty arrays.
-11. For detectedSourceLanguage, use MIXED if multiple major languages are present.
-12. Use these language codes only when possible: TA, ML, HI, ES, EN, UNKNOWN.
+9. Preserve local names unless there is a well-known English spelling.
+10. Detect the language or languages present in each field.
+11. If a field contains English plus an Indian language, include both.
+12. If text is empty, languages and languageCodes should be empty arrays.
+13. For detectedSourceLanguage, use MIXED if multiple major languages are present.
+14. Use these language codes only when possible: TA, ML, HI, ES, EN, UNKNOWN.
+
+Transliteration rules:
+1. transliteratedTexts must help an English reader read or pronounce the original text.
+2. Transliteration is not translation.
+3. For brand names with obvious English spelling, use common English spelling.
+4. For English input, keep the same text.
+5. For empty input, return an empty string.
+6. Preserve numbers, punctuation, postal codes, coordinates, and address structure.
+7. Do not add explanatory notes inside transliteratedTexts.
+8. Examples:
+   - "ഇന്ത്യൻ ഓയിൽ പെട്രോൾ പമ്പ്" -> "Indian Oil Petrol Pump"
+   - "திருச்சிராப்பள்ளி" -> "Tiruchirappalli"
+   - "പെരുമ്പാവൂർ" -> "Perumbavoor"
 
 Spelling review rules:
 1. Check every input independently.
@@ -222,6 +240,14 @@ ${JSON.stringify(inputItems)}
 
     if (localizedTexts.length !== textArray.length) {
       localizedTexts = textArray.map((item) => String(item || ''));
+    }
+
+    let transliteratedTexts = Array.isArray(parsed.transliteratedTexts)
+      ? parsed.transliteratedTexts.map((item) => String(item ?? ''))
+      : [];
+
+    if (transliteratedTexts.length !== textArray.length) {
+      transliteratedTexts = textArray.map((item) => String(item || ''));
     }
 
     const allowedFieldTypes = new Set([
@@ -310,6 +336,7 @@ ${JSON.stringify(inputItems)}
 
     return res.status(200).json({
       localizedTexts,
+      transliteratedTexts,
       spellingIssues,
       fieldNotes,
       fieldLanguages,

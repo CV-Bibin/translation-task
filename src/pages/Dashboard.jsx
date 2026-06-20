@@ -62,11 +62,13 @@ const Dashboard = () => {
   const [showDbModal, setShowDbModal] = useState(false);
   const [pendingDbData, setPendingDbData] = useState(null);
   const [pendingExtractedData, setPendingExtractedData] = useState(null);
+  const [transliteratedTexts, setTransliteratedTexts] = useState([]);
 
   const clearAiMeta = () => {
     setSpellingIssues([]);
     setFieldNotes([]);
     setFieldLanguages([]);
+    setTransliteratedTexts([]);
   };
 
   const resetTaskState = () => {
@@ -129,6 +131,7 @@ const Dashboard = () => {
       setFieldNotes(pendingDbData.fieldNotes || []);
       setFieldLanguages(pendingDbData.fieldLanguages || []);
       setDetectedLang(pendingDbData.detectedLang || '');
+setTransliteratedTexts(pendingDbData.transliteratedTexts || []);
 
       if (pendingDbData.smartLocalizedData) {
         setViewMode('smartLocalized');
@@ -239,12 +242,13 @@ const Dashboard = () => {
       });
 
       const {
-        localizedTexts,
-        spellingIssues: aiSpellingIssues,
-        fieldNotes: aiFieldNotes,
-        fieldLanguages: aiFieldLanguages,
-        detectedSourceLanguage,
-      } = await smartLocalizeTaskFields(textsToLocalize, 'AUTO');
+  localizedTexts,
+  transliteratedTexts: aiTransliteratedTexts,
+  spellingIssues: aiSpellingIssues,
+  fieldNotes: aiFieldNotes,
+  fieldLanguages: aiFieldLanguages,
+  detectedSourceLanguage,
+} = await smartLocalizeTaskFields(textsToLocalize, 'AUTO');
 
       let ptr = 0;
 
@@ -265,6 +269,7 @@ const Dashboard = () => {
 
       setSmartLocalizedTask(newSmartLocalizedTask);
       setSpellingIssues(aiSpellingIssues || []);
+      setTransliteratedTexts(aiTransliteratedTexts || []);
       setFieldNotes(aiFieldNotes || []);
       setFieldLanguages(aiFieldLanguages || []);
       setDetectedLang(finalDetectedLang);
@@ -273,14 +278,15 @@ const Dashboard = () => {
       if (newSmartLocalizedTask.requestId && newSmartLocalizedTask.requestId !== 'N/A') {
         try {
           await setDoc(doc(db, 'tasks', newSmartLocalizedTask.requestId), {
-            originalData: originalTask,
-            translatedData: translatedTask || null,
-            smartLocalizedData: newSmartLocalizedTask,
-            spellingIssues: aiSpellingIssues || [],
-            fieldNotes: aiFieldNotes || [],
-            fieldLanguages: aiFieldLanguages || [],
-            detectedLang: finalDetectedLang,
-          }, { merge: true });
+  originalData: originalTask,
+  translatedData: translatedTask || null,
+  smartLocalizedData: newSmartLocalizedTask,
+  spellingIssues: aiSpellingIssues || [],
+  fieldNotes: aiFieldNotes || [],
+  fieldLanguages: aiFieldLanguages || [],
+  transliteratedTexts: aiTransliteratedTexts || [],
+  detectedLang: finalDetectedLang,
+}, { merge: true });
 
           setIsCached(true);
         } catch (dbErr) {
@@ -339,14 +345,52 @@ const Dashboard = () => {
     );
   };
 
-  const CompareField = ({ label, originalValue, smartValue, inputIndex }) => (
+const CompareField = ({ label, originalValue, smartValue, inputIndex }) => {
+  const transliteration = transliteratedTexts[inputIndex];
+  const spellingIssue = spellingIssues.find((issue) => issue.inputIndex === inputIndex);
+
+  const shouldShowTransliteration =
+    transliteration &&
+    transliteration.trim() &&
+    transliteration.trim() !== String(originalValue || '').trim();
+
+  return (
     <div style={{ borderBottom: '1px solid #eee', padding: '10px 0' }}>
       <div style={{ fontWeight: 'bold', color: '#555', marginBottom: '6px' }}>{label}</div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
         <div>
           <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold', marginBottom: '2px' }}>Original</div>
           <div>{originalValue || '-'}</div>
+
+          {shouldShowTransliteration && (
+            <div style={{ marginTop: '6px' }}>
+              <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold' }}>Read as</div>
+              <div style={{ color: '#0f3460', fontWeight: 'bold' }}>{transliteration}</div>
+            </div>
+          )}
+
+          {spellingIssue && (
+            <div style={{
+              marginTop: '8px',
+              backgroundColor: '#fff3cd',
+              border: '1px solid #ffecb5',
+              color: '#664d03',
+              padding: '7px 8px',
+              borderRadius: '6px',
+              fontSize: '12px',
+              lineHeight: 1.35,
+            }}>
+              <div><strong>Possible spelling issue</strong></div>
+              <div><strong>Raw:</strong> {spellingIssue.originalWord || '-'}</div>
+              <div><strong>Read as:</strong> {spellingIssue.actualTransliteration || '-'}</div>
+              <div><strong>Suggested:</strong> {spellingIssue.suggestedWord || '-'}</div>
+              {spellingIssue.severity && <div><strong>Severity:</strong> {spellingIssue.severity}</div>}
+              {spellingIssue.reason && <div><strong>Reason:</strong> {spellingIssue.reason}</div>}
+            </div>
+          )}
         </div>
+
         <div>
           <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold', marginBottom: '2px' }}>Smart English</div>
           <div style={{ color: '#0f3460', fontWeight: 'bold' }}>{smartValue || '-'}</div>
@@ -355,6 +399,7 @@ const Dashboard = () => {
       </div>
     </div>
   );
+};
 
   return (
     <div style={{ fontFamily: 'Segoe UI, sans-serif', backgroundColor: '#f0f2f5', minHeight: '100vh', margin: 0, padding: 0 }}>
@@ -446,9 +491,22 @@ const Dashboard = () => {
                   Smart English
                 </button>
 
-                <button onClick={() => setViewMode('compare')} disabled={!smartLocalizedTask} style={{ padding: '6px 12px', border: 'none', cursor: smartLocalizedTask ? 'pointer' : 'not-allowed', fontWeight: 'bold', backgroundColor: viewMode === 'compare' && smartLocalizedTask ? '#0f3460' : 'transparent', color: viewMode === 'compare' && smartLocalizedTask ? 'white' : '#aaa' }}>
-                  Compare
-                </button>
+               <button
+  onClick={() => setViewMode('compare')}
+  disabled={!smartLocalizedTask}
+  style={{
+    padding: '6px 14px',
+    border: 'none',
+    cursor: smartLocalizedTask ? 'pointer' : 'not-allowed',
+    fontWeight: 'bold',
+    backgroundColor: viewMode === 'compare' && smartLocalizedTask ? '#0f766e' : '#ecfeff',
+    color: viewMode === 'compare' && smartLocalizedTask ? 'white' : smartLocalizedTask ? '#0f766e' : '#aaa',
+    borderLeft: '1px solid #bae6fd',
+    boxShadow: viewMode === 'compare' && smartLocalizedTask ? 'inset 0 -2px 0 rgba(0,0,0,0.18)' : 'none',
+  }}
+>
+  Compare
+</button>
               </div>
             </div>
 
