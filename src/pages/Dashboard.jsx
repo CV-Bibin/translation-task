@@ -145,7 +145,7 @@ const Dashboard = () => {
       setFieldNotes(pendingDbData.fieldNotes || []);
       setFieldLanguages(pendingDbData.fieldLanguages || []);
       setDetectedLang(pendingDbData.detectedLang || '');
-setTransliteratedTexts(pendingDbData.transliteratedTexts || []);
+      setTransliteratedTexts(pendingDbData.transliteratedTexts || []);
 
       if (pendingDbData.smartLocalizedData) {
         setViewMode('smartLocalized');
@@ -256,13 +256,13 @@ setTransliteratedTexts(pendingDbData.transliteratedTexts || []);
       });
 
       const {
-  localizedTexts,
-  transliteratedTexts: aiTransliteratedTexts,
-  spellingIssues: aiSpellingIssues,
-  fieldNotes: aiFieldNotes,
-  fieldLanguages: aiFieldLanguages,
-  detectedSourceLanguage,
-} = await smartLocalizeTaskFields(textsToLocalize, 'AUTO');
+        localizedTexts,
+        transliteratedTexts: aiTransliteratedTexts,
+        spellingIssues: aiSpellingIssues,
+        fieldNotes: aiFieldNotes,
+        fieldLanguages: aiFieldLanguages,
+        detectedSourceLanguage,
+      } = await smartLocalizeTaskFields(textsToLocalize, 'AUTO');
 
       let ptr = 0;
 
@@ -292,15 +292,15 @@ setTransliteratedTexts(pendingDbData.transliteratedTexts || []);
       if (newSmartLocalizedTask.requestId && newSmartLocalizedTask.requestId !== 'N/A') {
         try {
           await setDoc(doc(db, 'tasks', newSmartLocalizedTask.requestId), {
-  originalData: originalTask,
-  translatedData: translatedTask || null,
-  smartLocalizedData: newSmartLocalizedTask,
-  spellingIssues: aiSpellingIssues || [],
-  fieldNotes: aiFieldNotes || [],
-  fieldLanguages: aiFieldLanguages || [],
-  transliteratedTexts: aiTransliteratedTexts || [],
-  detectedLang: finalDetectedLang,
-}, { merge: true });
+            originalData: originalTask,
+            translatedData: translatedTask || null,
+            smartLocalizedData: newSmartLocalizedTask,
+            spellingIssues: aiSpellingIssues || [],
+            fieldNotes: aiFieldNotes || [],
+            fieldLanguages: aiFieldLanguages || [],
+            transliteratedTexts: aiTransliteratedTexts || [],
+            detectedLang: finalDetectedLang,
+          }, { merge: true });
 
           setIsCached(true);
         } catch (dbErr) {
@@ -359,188 +359,194 @@ setTransliteratedTexts(pendingDbData.transliteratedTexts || []);
     );
   };
 
-const CompareField = ({ label, originalValue, smartValue, inputIndex }) => {
-  const transliteration = transliteratedTexts[inputIndex];
-  const spellingIssue = spellingIssues.find((issue) => issue.inputIndex === inputIndex);
+  const CompareField = ({ label, originalValue, smartValue, inputIndex }) => {
+    const transliteration = transliteratedTexts[inputIndex];
+    const spellingIssue = spellingIssues.find((issue) => issue.inputIndex === inputIndex);
 
-  const shouldShowTransliteration =
-    transliteration &&
-    transliteration.trim() &&
-    transliteration.trim() !== String(originalValue || '').trim();
+    const shouldShowTransliteration =
+      transliteration &&
+      transliteration.trim() &&
+      transliteration.trim() !== String(originalValue || '').trim();
 
-  return (
-    <div style={{ borderBottom: '1px solid #eee', padding: '10px 0' }}>
-      <div style={{ fontWeight: 'bold', color: '#555', marginBottom: '6px' }}>{label}</div>
+    return (
+      <div style={{ borderBottom: '1px solid #eee', padding: '10px 0' }}>
+        <div style={{ fontWeight: 'bold', color: '#555', marginBottom: '6px' }}>{label}</div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-        <div>
-          <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold', marginBottom: '2px' }}>Original</div>
-          <div>{originalValue || '-'}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div>
+            <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold', marginBottom: '2px' }}>Original</div>
+            <div>{originalValue || '-'}</div>
 
-          {shouldShowTransliteration && (
-            <div style={{ marginTop: '6px' }}>
-              <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold' }}>Read as</div>
-              <div style={{ color: '#0f3460', fontWeight: 'bold' }}>{transliteration}</div>
-            </div>
-          )}
+            {shouldShowTransliteration && (
+              <div style={{ marginTop: '6px' }}>
+                <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold' }}>Read as</div>
+                <div style={{ color: '#0f3460', fontWeight: 'bold' }}>{transliteration}</div>
+              </div>
+            )}
 
-          {spellingIssue && (
-            <div style={{
-              marginTop: '8px',
-              backgroundColor: '#fff3cd',
-              border: '1px solid #ffecb5',
-              color: '#664d03',
-              padding: '7px 8px',
-              borderRadius: '6px',
-              fontSize: '12px',
-              lineHeight: 1.35,
-            }}>
-              <div><strong>Possible spelling issue</strong></div>
-              <div><strong>Raw:</strong> {spellingIssue.originalWord || '-'}</div>
-              <div><strong>Read as:</strong> {spellingIssue.actualTransliteration || '-'}</div>
-              <div><strong>Suggested:</strong> {spellingIssue.suggestedWord || '-'}</div>
-              {spellingIssue.severity && <div><strong>Severity:</strong> {spellingIssue.severity}</div>}
-              {spellingIssue.reason && <div><strong>Reason:</strong> {spellingIssue.reason}</div>}
-            </div>
-          )}
-        </div>
+            {spellingIssue && (
+              <div style={{
+                marginTop: '8px',
+                backgroundColor: '#fff3cd',
+                border: '1px solid #ffecb5',
+                color: '#664d03',
+                padding: '7px 8px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                lineHeight: 1.35,
+              }}>
+                <div><strong>Possible spelling issue</strong></div>
+                <div><strong>Raw:</strong> {spellingIssue.originalWord || '-'}</div>
+                <div><strong>Read as:</strong> {spellingIssue.actualTransliteration || '-'}</div>
+                <div><strong>Suggested:</strong> {spellingIssue.suggestedWord || '-'}</div>
+                {spellingIssue.severity && <div><strong>Severity:</strong> {spellingIssue.severity}</div>}
+                {spellingIssue.reason && <div><strong>Reason:</strong> {spellingIssue.reason}</div>}
+              </div>
+            )}
+          </div>
 
-        <div>
-          <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold', marginBottom: '2px' }}>Smart English</div>
-          <div style={{ color: '#0f3460', fontWeight: 'bold' }}>{smartValue || '-'}</div>
-          {renderFieldMeta(inputIndex)}
+          <div>
+            <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold', marginBottom: '2px' }}>Smart English</div>
+            <div style={{ color: '#0f3460', fontWeight: 'bold' }}>{smartValue || '-'}</div>
+            {renderFieldMeta(inputIndex)}
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
   return (
-<div style={{ fontFamily: 'Segoe UI, sans-serif', backgroundColor: APP_THEME.pageBg, minHeight: '100vh', margin: 0, padding: 0, color: APP_THEME.textMain }}>      {showDbModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', maxWidth: '400px', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
-            <h3 style={{ marginTop: 0 }}>Task Found in Database</h3>
-            <p style={{ color: '#555', marginBottom: '25px' }}>This Request ID has already been processed previously. Would you like to load the saved data?</p>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button onClick={handleRejectDb} style={{ padding: '10px 15px', border: '1px solid #ccc', backgroundColor: '#f8f9fa', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Ignore & Use New Paste</button>
-              <button onClick={handleAcceptDb} style={{ padding: '10px 15px', border: 'none', backgroundColor: '#0d6efd', color: 'white', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Load from Database</button>
+    <div style={{ fontFamily: 'Segoe UI, sans-serif', backgroundColor: APP_THEME.pageBg, minHeight: '100vh', margin: 0, padding: 0, color: APP_THEME.textMain }}>      {showDbModal && (
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+        <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', maxWidth: '400px', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+          <h3 style={{ marginTop: 0 }}>Task Found in Database</h3>
+          <p style={{ color: '#555', marginBottom: '25px' }}>This Request ID has already been processed previously. Would you like to load the saved data?</p>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <button onClick={handleRejectDb} style={{ padding: '10px 15px', border: '1px solid #ccc', backgroundColor: '#f8f9fa', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Ignore & Use New Paste</button>
+            <button onClick={handleAcceptDb} style={{ padding: '10px 15px', border: 'none', backgroundColor: '#0d6efd', color: 'white', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Load from Database</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+      <div style={{
+        backgroundColor: APP_THEME.topBar,
+        color: 'white',
+        padding: '14px 26px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxShadow: '0 2px 10px rgba(15, 23, 42, 0.18)',
+        borderBottom: `3px solid ${APP_THEME.topBarAccent}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            width: '10px',
+            height: '28px',
+            backgroundColor: APP_THEME.topBarAccent,
+            borderRadius: '2px',
+          }} />
+          <div>
+            <div style={{ fontSize: '17px', fontWeight: '800', letterSpacing: '0' }}>
+              Rating Workflow Dashboard
+            </div>
+            <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '2px' }}>
+              Multilingual map task assistant
             </div>
           </div>
         </div>
-      )}
 
-      <div style={{
-  backgroundColor: APP_THEME.topBar,
-  color: 'white',
-  padding: '14px 26px',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  boxShadow: '0 2px 10px rgba(15, 23, 42, 0.18)',
-  borderBottom: `3px solid ${APP_THEME.topBarAccent}`,
-}}>
-  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-    <div style={{
-      width: '10px',
-      height: '28px',
-      backgroundColor: APP_THEME.topBarAccent,
-      borderRadius: '2px',
-    }} />
-    <div>
-      <div style={{ fontSize: '17px', fontWeight: '800', letterSpacing: '0' }}>
-        Rating Workflow Dashboard
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            type="button"
+            disabled
+            title="Rating tips coming soon"
+            style={{
+              backgroundColor: '#f59e0b',
+              color: '#111827',
+              border: 'none',
+              padding: '8px 14px',
+              cursor: 'not-allowed',
+              borderRadius: '6px',
+              fontWeight: '800',
+              opacity: 0.85,
+            }}
+          >
+            Rating Tips
+          </button>
+
+          {originalTask && (
+            <button
+              onClick={resetTaskState}
+              style={{
+                backgroundColor: APP_THEME.danger,
+                color: 'white',
+                border: 'none',
+                padding: '8px 14px',
+                cursor: 'pointer',
+                borderRadius: '6px',
+                fontWeight: '700',
+              }}
+            >
+              Reset Interface
+            </button>
+          )}
+        </div>
       </div>
-      <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '2px' }}>
-        Multilingual map task assistant
-      </div>
-    </div>
-  </div>
-
-  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-    <button
-      type="button"
-      disabled
-      title="Rating tips coming soon"
-      style={{
-        backgroundColor: '#f59e0b',
-        color: '#111827',
-        border: 'none',
-        padding: '8px 14px',
-        cursor: 'not-allowed',
-        borderRadius: '6px',
-        fontWeight: '800',
-        opacity: 0.85,
-      }}
-    >
-      Rating Tips
-    </button>
-
-    {originalTask && (
-      <button
-        onClick={resetTaskState}
-        style={{
-          backgroundColor: APP_THEME.danger,
-          color: 'white',
-          border: 'none',
-          padding: '8px 14px',
-          cursor: 'pointer',
-          borderRadius: '6px',
-          fontWeight: '700',
-        }}
-      >
-        Reset Interface
-      </button>
-    )}
-  </div>
-</div>
 
       {!originalTask ? (
-<div style={{
-  maxWidth: '980px',
-  margin: '50px auto',
-  padding: '26px',
-  backgroundColor: APP_THEME.panelBg,
-  borderRadius: '10px',
-  border: `1px solid ${APP_THEME.panelBorder}`,
-  boxShadow: '0 14px 35px rgba(15, 23, 42, 0.10)',
-}}>         <div style={{ marginBottom: '18px' }}>
-  <h2 style={{ margin: 0, fontSize: '26px', color: APP_THEME.textMain }}>
-    Paste Task Data
-  </h2>
-  <div style={{ marginTop: '6px', color: APP_THEME.textMuted, fontSize: '13px' }}>
-    Paste AC or SM task text to parse, map, and localize.
-  </div>
-</div>
+        <div style={{
+          maxWidth: '980px',
+          margin: '50px auto',
+          padding: '26px',
+          backgroundColor: APP_THEME.panelBg,
+          borderRadius: '10px',
+          border: `1px solid ${APP_THEME.panelBorder}`,
+          boxShadow: '0 14px 35px rgba(15, 23, 42, 0.10)',
+        }}>         <div style={{ marginBottom: '18px' }}>
+            <h2 style={{ margin: 0, fontSize: '26px', color: APP_THEME.textMain }}>
+              Paste Task Data
+            </h2>
+            <div style={{ marginTop: '6px', color: APP_THEME.textMuted, fontSize: '13px' }}>
+              Paste AC or SM task text to parse, map, and localize.
+            </div>
+          </div>
 
           <textarea
             rows="12"
             value={rawData}
             onChange={(e) => setRawData(e.target.value)}
-style={{
-  width: '100%',
-  padding: '14px',
-  border: `1px solid ${APP_THEME.panelBorder}`,
-  borderRadius: '8px',
-  fontFamily: 'Consolas, monospace',
-  fontSize: '13px',
-  lineHeight: 1.45,
-  outline: 'none',
-  boxSizing: 'border-box',
-  backgroundColor: '#fbfdff',
-}}          />
+            style={{
+              width: '100%',
+              padding: '14px',
+              border: `1px solid ${APP_THEME.panelBorder}`,
+              borderRadius: '8px',
+              fontFamily: 'Consolas, monospace',
+              fontSize: '13px',
+              lineHeight: 1.45,
+              outline: 'none',
+              boxSizing: 'border-box',
+              backgroundColor: '#fbfdff',
+            }} />
 
-         style={{
-  width: '100%',
-  padding: '13px',
-  marginTop: '18px',
-  backgroundColor: APP_THEME.primary,
-  color: 'white',
-  cursor: isCheckingDB ? 'not-allowed' : 'pointer',
-  fontWeight: '800',
-  border: 'none',
-  borderRadius: '8px',
-  boxShadow: '0 6px 14px rgba(23, 74, 124, 0.22)',
-}}
+         <button
+  onClick={handleProcessTask}
+  disabled={isCheckingDB}
+  style={{
+    width: '100%',
+    padding: '13px',
+    marginTop: '18px',
+    backgroundColor: APP_THEME.primary,
+    color: 'white',
+    cursor: isCheckingDB ? 'not-allowed' : 'pointer',
+    fontWeight: '800',
+    border: 'none',
+    borderRadius: '8px',
+    boxShadow: '0 6px 14px rgba(23, 74, 124, 0.22)',
+  }}
+>
+  {isCheckingDB ? 'Checking Database...' : 'Extract & Build Layout'}
+</button>
 
           {transError && <p style={{ color: '#dc3545', fontWeight: 'bold' }}>{transError}</p>}
         </div>
@@ -555,19 +561,19 @@ style={{
           </div>
 
           <div style={{ width: '55%', backgroundColor: 'white', overflowY: 'auto', padding: '20px' }}>
-<div style={{
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  backgroundColor: '#f8fbff',
-  padding: '12px 16px',
-  borderRadius: '8px',
-  marginBottom: '20px',
-  border: `1px solid ${APP_THEME.panelBorder}`,
-  boxShadow: '0 8px 20px rgba(15, 23, 42, 0.06)',
-  gap: '10px',
-  flexWrap: 'wrap',
-}}>              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: '#f8fbff',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              border: `1px solid ${APP_THEME.panelBorder}`,
+              boxShadow: '0 8px 20px rgba(15, 23, 42, 0.06)',
+              gap: '10px',
+              flexWrap: 'wrap',
+            }}>              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 {isCached && <span style={{ fontSize: '13px', color: '#198754', fontWeight: 'bold', marginRight: '5px', backgroundColor: '#d1e7dd', padding: '4px 8px', borderRadius: '4px' }}>DB Archive</span>}
 
                 <select value={targetLang} onChange={(e) => setTargetLang(e.target.value)} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>
@@ -604,22 +610,22 @@ style={{
                   Smart English
                 </button>
 
-               <button
-  onClick={() => setViewMode('compare')}
-  disabled={!smartLocalizedTask}
-  style={{
-    padding: '6px 14px',
-    border: 'none',
-    cursor: smartLocalizedTask ? 'pointer' : 'not-allowed',
-    fontWeight: 'bold',
-    backgroundColor: viewMode === 'compare' && smartLocalizedTask ? '#0f766e' : '#ecfeff',
-    color: viewMode === 'compare' && smartLocalizedTask ? 'white' : smartLocalizedTask ? '#0f766e' : '#aaa',
-    borderLeft: '1px solid #bae6fd',
-    boxShadow: viewMode === 'compare' && smartLocalizedTask ? 'inset 0 -2px 0 rgba(0,0,0,0.18)' : 'none',
-  }}
->
-  Compare
-</button>
+                <button
+                  onClick={() => setViewMode('compare')}
+                  disabled={!smartLocalizedTask}
+                  style={{
+                    padding: '6px 14px',
+                    border: 'none',
+                    cursor: smartLocalizedTask ? 'pointer' : 'not-allowed',
+                    fontWeight: 'bold',
+                    backgroundColor: viewMode === 'compare' && smartLocalizedTask ? '#0f766e' : '#ecfeff',
+                    color: viewMode === 'compare' && smartLocalizedTask ? 'white' : smartLocalizedTask ? '#0f766e' : '#aaa',
+                    borderLeft: '1px solid #bae6fd',
+                    boxShadow: viewMode === 'compare' && smartLocalizedTask ? 'inset 0 -2px 0 rgba(0,0,0,0.18)' : 'none',
+                  }}
+                >
+                  Compare
+                </button>
               </div>
             </div>
 
