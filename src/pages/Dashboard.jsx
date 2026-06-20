@@ -25,6 +25,8 @@ const LANGUAGE_NAMES = {
   TA: 'Tamil',
   HI: 'Hindi',
   ES: 'Spanish',
+  MIXED: 'Mixed',
+  UNKNOWN: 'Unknown',
   AUTO: 'Auto Detect',
 };
 
@@ -51,6 +53,8 @@ const Dashboard = () => {
   const [transError, setTransError] = useState('');
   const [targetLang, setTargetLang] = useState('EN-US');
   const [spellingIssues, setSpellingIssues] = useState([]);
+  const [fieldNotes, setFieldNotes] = useState([]);
+  const [fieldLanguages, setFieldLanguages] = useState([]);
 
   const [isCached, setIsCached] = useState(false);
   const [isCheckingDB, setIsCheckingDB] = useState(false);
@@ -59,11 +63,17 @@ const Dashboard = () => {
   const [pendingDbData, setPendingDbData] = useState(null);
   const [pendingExtractedData, setPendingExtractedData] = useState(null);
 
+  const clearAiMeta = () => {
+    setSpellingIssues([]);
+    setFieldNotes([]);
+    setFieldLanguages([]);
+  };
+
   const resetTaskState = () => {
     setOriginalTask(null);
     setTranslatedTask(null);
     setSmartLocalizedTask(null);
-    setSpellingIssues([]);
+    clearAiMeta();
     setRawData('');
     setIsCached(false);
     setDetectedLang('');
@@ -96,7 +106,7 @@ const Dashboard = () => {
       setOriginalTask(extractedData);
       setTranslatedTask(null);
       setSmartLocalizedTask(null);
-      setSpellingIssues([]);
+      clearAiMeta();
       setViewMode('original');
       setIsCached(false);
       setDetectedLang('');
@@ -116,6 +126,8 @@ const Dashboard = () => {
       setTranslatedTask(pendingDbData.translatedData || null);
       setSmartLocalizedTask(pendingDbData.smartLocalizedData || null);
       setSpellingIssues(pendingDbData.spellingIssues || []);
+      setFieldNotes(pendingDbData.fieldNotes || []);
+      setFieldLanguages(pendingDbData.fieldLanguages || []);
       setDetectedLang(pendingDbData.detectedLang || '');
 
       if (pendingDbData.smartLocalizedData) {
@@ -129,7 +141,7 @@ const Dashboard = () => {
       setOriginalTask(pendingDbData);
       setTranslatedTask(null);
       setSmartLocalizedTask(null);
-      setSpellingIssues([]);
+      clearAiMeta();
       setViewMode('original');
     }
 
@@ -141,7 +153,7 @@ const Dashboard = () => {
     setOriginalTask(pendingExtractedData);
     setTranslatedTask(null);
     setSmartLocalizedTask(null);
-    setSpellingIssues([]);
+    clearAiMeta();
     setViewMode('original');
     setIsCached(false);
     setDetectedLang('');
@@ -192,6 +204,8 @@ const Dashboard = () => {
             translatedData: newTranslatedTask,
             smartLocalizedData: smartLocalizedTask || null,
             spellingIssues,
+            fieldNotes,
+            fieldLanguages,
             detectedLang: detectedSourceLanguage,
           }, { merge: true });
 
@@ -227,6 +241,8 @@ const Dashboard = () => {
       const {
         localizedTexts,
         spellingIssues: aiSpellingIssues,
+        fieldNotes: aiFieldNotes,
+        fieldLanguages: aiFieldLanguages,
         detectedSourceLanguage,
       } = await smartLocalizeTaskFields(textsToLocalize, 'AUTO');
 
@@ -249,6 +265,8 @@ const Dashboard = () => {
 
       setSmartLocalizedTask(newSmartLocalizedTask);
       setSpellingIssues(aiSpellingIssues || []);
+      setFieldNotes(aiFieldNotes || []);
+      setFieldLanguages(aiFieldLanguages || []);
       setDetectedLang(finalDetectedLang);
       setViewMode('smartLocalized');
 
@@ -259,6 +277,8 @@ const Dashboard = () => {
             translatedData: translatedTask || null,
             smartLocalizedData: newSmartLocalizedTask,
             spellingIssues: aiSpellingIssues || [],
+            fieldNotes: aiFieldNotes || [],
+            fieldLanguages: aiFieldLanguages || [],
             detectedLang: finalDetectedLang,
           }, { merge: true });
 
@@ -278,11 +298,63 @@ const Dashboard = () => {
   const activeTask =
     viewMode === 'translated' && translatedTask
       ? translatedTask
-      : viewMode === 'smartLocalized' && smartLocalizedTask
+      : (viewMode === 'smartLocalized' || viewMode === 'compare') && smartLocalizedTask
         ? smartLocalizedTask
         : originalTask;
 
   const querySpellingIssue = spellingIssues.find((issue) => issue.inputIndex === 0);
+
+  const getLanguageInfo = (inputIndex) =>
+    fieldLanguages.find((item) => item.inputIndex === inputIndex);
+
+  const getFieldNote = (inputIndex) =>
+    fieldNotes.find((item) => item.inputIndex === inputIndex);
+
+  const renderFieldMeta = (inputIndex) => {
+    const languageInfo = getLanguageInfo(inputIndex);
+    const fieldNote = getFieldNote(inputIndex);
+
+    if (!languageInfo && !fieldNote) return null;
+
+    return (
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+        {languageInfo?.languages?.map((lang) => (
+          <span key={lang} style={{ backgroundColor: '#e8f0fe', color: '#1a73e8', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' }}>
+            {lang}
+          </span>
+        ))}
+
+        {fieldNote?.mode && (
+          <span style={{ backgroundColor: '#e7f5ec', color: '#146c43', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' }}>
+            {fieldNote.mode.replaceAll('_', ' ')}
+          </span>
+        )}
+
+        {fieldNote?.confidence && (
+          <span style={{ backgroundColor: '#fff3cd', color: '#664d03', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' }}>
+            {fieldNote.confidence} confidence
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const CompareField = ({ label, originalValue, smartValue, inputIndex }) => (
+    <div style={{ borderBottom: '1px solid #eee', padding: '10px 0' }}>
+      <div style={{ fontWeight: 'bold', color: '#555', marginBottom: '6px' }}>{label}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div>
+          <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold', marginBottom: '2px' }}>Original</div>
+          <div>{originalValue || '-'}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold', marginBottom: '2px' }}>Smart English</div>
+          <div style={{ color: '#0f3460', fontWeight: 'bold' }}>{smartValue || '-'}</div>
+          {renderFieldMeta(inputIndex)}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ fontFamily: 'Segoe UI, sans-serif', backgroundColor: '#f0f2f5', minHeight: '100vh', margin: 0, padding: 0 }}>
@@ -350,19 +422,7 @@ const Dashboard = () => {
                   {isTranslating ? 'Translating...' : 'Translate'}
                 </button>
 
-                <button
-                  onClick={handleSmartLocalize}
-                  disabled={isSmartLocalizing}
-                  style={{
-                    backgroundColor: '#6f42c1',
-                    color: 'white',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '4px',
-                    cursor: isSmartLocalizing ? 'not-allowed' : 'pointer',
-                    fontWeight: 'bold',
-                  }}
-                >
+                <button onClick={handleSmartLocalize} disabled={isSmartLocalizing} style={{ backgroundColor: '#6f42c1', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: isSmartLocalizing ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
                   {isSmartLocalizing ? 'Checking...' : 'Smart English'}
                 </button>
 
@@ -385,21 +445,17 @@ const Dashboard = () => {
                 <button onClick={() => setViewMode('smartLocalized')} disabled={!smartLocalizedTask} style={{ padding: '6px 12px', border: 'none', cursor: smartLocalizedTask ? 'pointer' : 'not-allowed', fontWeight: 'bold', backgroundColor: viewMode === 'smartLocalized' && smartLocalizedTask ? '#0f3460' : 'transparent', color: viewMode === 'smartLocalized' && smartLocalizedTask ? 'white' : '#aaa' }}>
                   Smart English
                 </button>
+
+                <button onClick={() => setViewMode('compare')} disabled={!smartLocalizedTask} style={{ padding: '6px 12px', border: 'none', cursor: smartLocalizedTask ? 'pointer' : 'not-allowed', fontWeight: 'bold', backgroundColor: viewMode === 'compare' && smartLocalizedTask ? '#0f3460' : 'transparent', color: viewMode === 'compare' && smartLocalizedTask ? 'white' : '#aaa' }}>
+                  Compare
+                </button>
               </div>
             </div>
 
             {transError && <p style={{ color: '#dc3545', fontWeight: 'bold' }}>{transError}</p>}
 
             {viewMode === 'smartLocalized' && spellingIssues.length > 0 && (
-              <div style={{
-                backgroundColor: '#fff3cd',
-                border: '1px solid #ffecb5',
-                color: '#664d03',
-                padding: '10px 12px',
-                borderRadius: '6px',
-                marginBottom: '15px',
-                fontSize: '13px',
-              }}>
+              <div style={{ backgroundColor: '#fff3cd', border: '1px solid #ffecb5', color: '#664d03', padding: '10px 12px', borderRadius: '6px', marginBottom: '15px', fontSize: '13px' }}>
                 <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
                   {spellingIssues.length} possible spelling {spellingIssues.length === 1 ? 'issue' : 'issues'} found
                 </div>
@@ -407,12 +463,8 @@ const Dashboard = () => {
                 <ul style={{ margin: '0 0 0 18px', padding: 0 }}>
                   {spellingIssues.map((issue, index) => (
                     <li key={`${issue.inputIndex}-${index}`} style={{ marginBottom: '5px' }}>
-                      <strong>{issue.fieldType || 'field'}</strong>
-                      {' '}
-                      #{issue.inputIndex}:
-                      {' '}
-                      <span>{issue.originalWord || '-'}</span>
-                      {' -> '}
+                      <strong>{issue.fieldType || 'field'}</strong> #{issue.inputIndex}:{' '}
+                      <span>{issue.originalWord || '-'}</span> {' -> '}
                       <span>{issue.suggestedWord || '-'}</span>
                       {issue.severity ? ` [${issue.severity}]` : ''}
                       {issue.reason ? ` - ${issue.reason}` : ''}
@@ -434,15 +486,7 @@ const Dashboard = () => {
                 <span style={{ color: '#0f3460', fontWeight: 'bold', fontSize: '15px' }}>{activeTask.query}</span>
 
                 {viewMode === 'smartLocalized' && querySpellingIssue && (
-                  <div style={{
-                    marginTop: '8px',
-                    backgroundColor: '#fff3cd',
-                    border: '1px solid #ffecb5',
-                    color: '#664d03',
-                    padding: '8px',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                  }}>
+                  <div style={{ marginTop: '8px', backgroundColor: '#fff3cd', border: '1px solid #ffecb5', color: '#664d03', padding: '8px', borderRadius: '6px', fontSize: '12px' }}>
                     <strong>Possible query spelling issue:</strong>{' '}
                     {querySpellingIssue.originalWord || '-'} {' -> '} {querySpellingIssue.suggestedWord || '-'}
                     {querySpellingIssue.reason ? ` (${querySpellingIssue.reason})` : ''}
@@ -451,26 +495,55 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {activeTask.results.map((result, idx) => {
-              const baseIndex = 1 + idx * 5;
+            {viewMode === 'compare' && originalTask && smartLocalizedTask ? (
+              <>
+                <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #e9ecef' }}>
+                  <CompareField label="Query" originalValue={originalTask.query} smartValue={smartLocalizedTask.query} inputIndex={0} />
+                </div>
 
-              const issuesForResult = {
-                title: spellingIssues.find((issue) => issue.inputIndex === baseIndex),
-                address: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 1),
-                category: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 2),
-                type: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 3),
-                status: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 4),
-              };
+                {smartLocalizedTask.results.map((smartResult, idx) => {
+                  const originalResult = originalTask.results[idx] || {};
+                  const baseIndex = 1 + idx * 5;
 
-              return (
-                <ResultCard
-                  key={idx}
-                  result={result}
-                  color={THEME_COLORS[idx % THEME_COLORS.length]}
-                  spellingIssues={viewMode === 'smartLocalized' ? issuesForResult : {}}
-                />
-              );
-            })}
+                  return (
+                    <div key={idx} style={{ border: '1px solid #ced4da', borderRadius: '6px', marginBottom: '25px', overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+                      <div style={{ backgroundColor: THEME_COLORS[idx % THEME_COLORS.length], color: 'white', padding: '10px 15px', fontWeight: 'bold', fontSize: '15px' }}>
+                        {smartResult.number} {smartResult.title}
+                      </div>
+
+                      <div style={{ padding: '15px', fontSize: '13px' }}>
+                        <CompareField label="Title" originalValue={originalResult.title} smartValue={smartResult.title} inputIndex={baseIndex} />
+                        <CompareField label="Address" originalValue={originalResult.address} smartValue={smartResult.address} inputIndex={baseIndex + 1} />
+                        <CompareField label="Category" originalValue={originalResult.category} smartValue={smartResult.category} inputIndex={baseIndex + 2} />
+                        <CompareField label="Type" originalValue={originalResult.type} smartValue={smartResult.type} inputIndex={baseIndex + 3} />
+                        <CompareField label="Status" originalValue={originalResult.status} smartValue={smartResult.status} inputIndex={baseIndex + 4} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            ) : (
+              activeTask.results.map((result, idx) => {
+                const baseIndex = 1 + idx * 5;
+
+                const issuesForResult = {
+                  title: spellingIssues.find((issue) => issue.inputIndex === baseIndex),
+                  address: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 1),
+                  category: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 2),
+                  type: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 3),
+                  status: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 4),
+                };
+
+                return (
+                  <ResultCard
+                    key={idx}
+                    result={result}
+                    color={THEME_COLORS[idx % THEME_COLORS.length]}
+                    spellingIssues={viewMode === 'smartLocalized' ? issuesForResult : {}}
+                  />
+                );
+              })
+            )}
           </div>
         </div>
       )}

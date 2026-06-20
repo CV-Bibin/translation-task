@@ -23,9 +23,10 @@ const IssueNote = ({ issue }) => {
       lineHeight: 1.35,
     }}>
       <div><strong>Possible spelling issue</strong></div>
-      <div><strong>Raw:</strong> {issue.originalWord}</div>
-      <div><strong>Actual transliteration:</strong> {issue.actualTransliteration}</div>
-      <div><strong>Suggested:</strong> {issue.suggestedWord}</div>
+      {issue.severity && <div><strong>Severity:</strong> {issue.severity}</div>}
+      <div><strong>Raw:</strong> {issue.originalWord || '-'}</div>
+      <div><strong>Actual transliteration:</strong> {issue.actualTransliteration || '-'}</div>
+      <div><strong>Suggested:</strong> {issue.suggestedWord || '-'}</div>
       {issue.reason && <div><strong>Reason:</strong> {issue.reason}</div>}
     </div>
   );
@@ -34,7 +35,7 @@ const IssueNote = ({ issue }) => {
 const FieldValue = ({ value, issue, children }) => (
   <td style={{ padding: '6px 0' }}>
     <IssueNote issue={issue} />
-    <div>{children || value || '-'}</div>
+    <div>{children ?? value ?? '-'}</div>
   </td>
 );
 
@@ -121,11 +122,11 @@ const ResultCard = ({ result, color, spellingIssues = {} }) => {
         </table>
 
         <div style={{ fontSize: '13px', color: '#495057', marginBottom: '15px' }}>
-          <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
-            <input type="checkbox" style={{ marginRight: '8px' }} /> Result name/title is in unexpected language or script
+          <label style={{ display: 'block', margin: '4px 0', color: '#555' }}>
+            <input type="checkbox" disabled style={{ marginRight: '8px' }} /> Result name/title is in unexpected language or script
           </label>
-          <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
-            <input type="checkbox" style={{ marginRight: '8px' }} /> Business/POI is closed or does not exist
+          <label style={{ display: 'block', margin: '4px 0', color: '#555' }}>
+            <input type="checkbox" disabled style={{ marginRight: '8px' }} /> Business/POI is closed or does not exist
           </label>
         </div>
 
