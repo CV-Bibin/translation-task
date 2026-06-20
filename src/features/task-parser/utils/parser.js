@@ -6,7 +6,7 @@ export const parseRawTaskText = (text) => {
     .map((line) => line.trim())
     .filter((line) => line !== '');
 
-  const taskData = {
+  let taskData = {
     taskFormat: '',
     taskType: '',
     requestId: '',
@@ -20,19 +20,29 @@ export const parseRawTaskText = (text) => {
     results: [],
   };
 
-  const normalise = (value) => String(value || '').toLowerCase().trim();
+  const normalize = (value) => String(value || '').toLowerCase().trim();
 
   const findGlobalValue = (label) => {
-    const idx = lines.findIndex((line) => normalise(line) === normalise(label));
+    const idx = lines.findIndex((line) => normalize(line) === normalize(label));
     return idx !== -1 && idx + 1 < lines.length ? lines[idx + 1] : '';
   };
 
   const getInlineValue = (line, label) => {
-    const normalizedLine = String(line || '').replace(/\s+/g, ' ').trim();
+    const cleanLine = String(line || '').replace(/\s+/g, ' ').trim();
     const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const match = normalizedLine.match(new RegExp(`^${escapedLabel}\\s+(.+)$`, 'i'));
+    const match = cleanLine.match(new RegExp(`^${escapedLabel}\\s+(.+)$`, 'i'));
     return match ? match[1].trim() : '';
   };
+
+  taskData.taskFormat = lines[0] || '';
+  taskData.taskType = findGlobalValue('Task Type');
+  taskData.requestId = findGlobalValue('Request ID');
+  taskData.estimatedTime = findGlobalValue('Estimated Rating Time');
+  taskData.query = findGlobalValue('Query');
+  taskData.viewportAge = findGlobalValue('Viewport Age');
+  taskData.locale = findGlobalValue('Locale');
+  taskData.country = findGlobalValue('Country');
+  taskData.userLatLng = findGlobalValue('User Lat, Lng');
 
   const resultLabels = [
     'Address',
@@ -55,10 +65,10 @@ export const parseRawTaskText = (text) => {
   ];
 
   const isResultLabel = (line) =>
-    resultLabels.some((label) => normalise(label) === normalise(line));
+    resultLabels.some((label) => normalize(label) === normalize(line));
 
-  const startsWithResultLabel = (line, label) =>
-    normalise(line).startsWith(normalise(label));
+  const startsWithLabel = (line, label) =>
+    normalize(line).startsWith(normalize(label));
 
   const isResultNumber = (line) => /^\d+\.$/.test(line);
 
@@ -68,55 +78,27 @@ export const parseRawTaskText = (text) => {
   const isViewportLine = (line) =>
     /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*:\s*\d+/.test(line);
 
-  const getNextResultValue = (index) => {
-    const nextLine = lines[index + 1];
+  const topLatLngIdx = lines.findIndex((line) => normalize(line) === 'lat, lng');
 
-    if (
-      nextLine &&
-      !isResultLabel(nextLine) &&
-      !isResultNumber(nextLine)
-    ) {
-      return nextLine;
-    }
-
-    return '';
-  };
-
-  taskData.taskFormat = lines[0] || '';
-  taskData.taskType = findGlobalValue('Task Type');
-  taskData.requestId = findGlobalValue('Request ID');
-  taskData.estimatedTime = findGlobalValue('Estimated Rating Time');
-  taskData.query = findGlobalValue('Query');
-  taskData.viewportAge = findGlobalValue('Viewport Age');
-  taskData.locale = findGlobalValue('Locale');
-  taskData.country = findGlobalValue('Country');
-  taskData.userLatLng = findGlobalValue('User Lat, Lng');
-
-  const latLngIndexes = lines
-    .map((line, index) => (normalise(line) === normalise('Lat, Lng') ? index : -1))
-    .filter((index) => index !== -1);
-
-  const topLatLngIdx = latLngIndexes[0];
-
-  if (topLatLngIdx !== undefined) {
+  if (topLatLngIdx !== -1) {
     const nextLine = lines[topLatLngIdx + 1];
 
     if (isCoordinates(nextLine)) {
       taskData.mapCenterLatLng = nextLine;
     } else {
-      const nearbyViewportLine = lines
+      const viewportLine = lines
         .slice(topLatLngIdx, topLatLngIdx + 8)
         .find(isViewportLine);
 
-      if (nearbyViewportLine) {
-        taskData.mapCenterLatLng = nearbyViewportLine.split(':')[0].trim();
+      if (viewportLine) {
+        taskData.mapCenterLatLng = viewportLine.split(':')[0].trim();
       }
     }
   }
 
   let topAutocompleteAddress = '';
 
-  if (normalise(taskData.taskType) === normalise('Autocomplete')) {
+  if (normalize(taskData.taskType) === 'autocomplete') {
     for (const line of lines) {
       const inlineAddress = getInlineValue(line, 'Address');
 
@@ -126,6 +108,21 @@ export const parseRawTaskText = (text) => {
       }
     }
   }
+
+  const getNextResultValue = (index) => {
+    const nextLine = lines[index + 1];
+
+    if (
+      nextLine &&
+      !isResultLabel(nextLine) &&
+      !isResultNumber(nextLine) &&
+      nextLine !== 'Result name/title is in unexpected language or script'
+    ) {
+      return nextLine;
+    }
+
+    return '';
+  };
 
   let currentResult = null;
 
@@ -139,8 +136,7 @@ export const parseRawTaskText = (text) => {
         number: line,
         title: lines[i + 1] || 'Unknown',
         address:
-          normalise(taskData.taskType) === normalise('Autocomplete') &&
-          line === '1.'
+          normalize(taskData.taskType) === 'autocomplete' && line === '1.'
             ? topAutocompleteAddress
             : '',
         category: '',
@@ -150,6 +146,17 @@ export const parseRawTaskText = (text) => {
         distanceToViewport: '',
         pinLatLng: '',
       };
+
+      const possibleSubtitle = lines[i + 2];
+
+      if (
+        possibleSubtitle &&
+        possibleSubtitle.includes('•') &&
+        !currentResult.address
+      ) {
+        const parts = possibleSubtitle.split('•').map((part) => part.trim());
+        currentResult.address = parts.slice(1).join(', ');
+      }
 
       continue;
     }
@@ -161,19 +168,20 @@ export const parseRawTaskText = (text) => {
       currentResult.address = parts.slice(1).join(', ');
     }
 
-    if (startsWithResultLabel(line, 'Address')) {
+    if (startsWithLabel(line, 'Address')) {
       const inlineAddress = getInlineValue(line, 'Address');
 
       if (inlineAddress) {
         currentResult.address = inlineAddress;
       } else {
-        const addrLines = [];
+        let addrLines = [];
         let j = i + 1;
 
         while (
           j < lines.length &&
           !isResultLabel(lines[j]) &&
-          !isResultNumber(lines[j])
+          !isResultNumber(lines[j]) &&
+          lines[j] !== 'Result name/title is in unexpected language or script'
         ) {
           addrLines.push(lines[j]);
           j++;
@@ -183,29 +191,12 @@ export const parseRawTaskText = (text) => {
       }
     }
 
-    if (normalise(line) === normalise('Category')) {
-      currentResult.category = getNextResultValue(i);
-    }
-
-    if (normalise(line) === normalise('Type')) {
-      currentResult.type = getNextResultValue(i);
-    }
-
-    if (normalise(line) === normalise('Status')) {
-      currentResult.status = getNextResultValue(i);
-    }
-
-    if (normalise(line) === normalise('Distance to User')) {
-      currentResult.distanceToUser = getNextResultValue(i);
-    }
-
-    if (normalise(line) === normalise('Distance to Viewport')) {
-      currentResult.distanceToViewport = getNextResultValue(i);
-    }
-
-    if (normalise(line) === normalise('Lat, Lng')) {
-      currentResult.pinLatLng = getNextResultValue(i);
-    }
+    if (normalize(line) === 'category') currentResult.category = getNextResultValue(i);
+    if (normalize(line) === 'type') currentResult.type = getNextResultValue(i);
+    if (normalize(line) === 'status') currentResult.status = getNextResultValue(i);
+    if (normalize(line) === 'distance to user') currentResult.distanceToUser = getNextResultValue(i);
+    if (normalize(line) === 'distance to viewport') currentResult.distanceToViewport = getNextResultValue(i);
+    if (normalize(line) === 'lat, lng') currentResult.pinLatLng = getNextResultValue(i);
   }
 
   if (currentResult) taskData.results.push(currentResult);
