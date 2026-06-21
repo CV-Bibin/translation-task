@@ -55,6 +55,7 @@ export default async function handler(req, res) {
       2. If Viewport is FRESH AND User is OUTSIDE -> Intent = VIEWPORT.
       3. If Viewport is STALE -> Intent = USER (whether inside or outside).
       4. If User Location is MISSING -> Intent = VIEWPORT.
+      5. Query contains ( near me , nearby , nearest)-> Intent = USER (whether inside or outside).
 
       STEP 2: Evaluate Results:
       Current Task Results: ${JSON.stringify(results)}
