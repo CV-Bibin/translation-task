@@ -9,7 +9,20 @@ import { db } from '../services/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const THEME_COLORS = ['#6f42c1', '#007bff', '#28a745', '#dc3545', '#ffc107'];
-
+const APP_THEME = {
+  pageBg: '#eef1f5',
+  topBar: '#111827',
+  topBarAccent: '#2563eb',
+  panelBg: '#ffffff',
+  panelBorder: '#d8dee9',
+  primary: '#174a7c',
+  primaryHover: '#123a61',
+  purple: '#6f42c1',
+  teal: '#0f766e',
+  danger: '#e94560',
+  textMain: '#111827',
+  textMuted: '#5b6472',
+};
 
 const SUPPORTED_LANGUAGES = [
   { code: 'EN-US', name: 'English' },
@@ -33,10 +46,8 @@ const LANGUAGE_NAMES = {
 
 const getLanguageLabel = (code) => {
   if (!code) return '';
-
   const normalizedCode = String(code).toUpperCase();
   const languageName = LANGUAGE_NAMES[normalizedCode];
-
   return languageName ? `${languageName} (${normalizedCode})` : normalizedCode;
 };
 
@@ -46,10 +57,14 @@ const Dashboard = () => {
   const [originalTask, setOriginalTask] = useState(null);
   const [translatedTask, setTranslatedTask] = useState(null);
   const [smartLocalizedTask, setSmartLocalizedTask] = useState(null);
-  const [viewMode, setViewMode] = useState('original');
+  // viewMode can now be: 'original', 'translated', 'smartLocalized', 'compare', 'tips'
+  const [viewMode, setViewMode] = useState('original'); 
 
   const [isTranslating, setIsTranslating] = useState(false);
   const [isSmartLocalizing, setIsSmartLocalizing] = useState(false);
+  const [isGettingTips, setIsGettingTips] = useState(false); // New state for tips loading
+  const [tipsData, setTipsData] = useState(''); // New state to store generated tips
+
   const [detectedLang, setDetectedLang] = useState('');
   const [transError, setTransError] = useState('');
   const [targetLang, setTargetLang] = useState('EN-US');
@@ -70,6 +85,7 @@ const Dashboard = () => {
     setFieldNotes([]);
     setFieldLanguages([]);
     setTransliteratedTexts([]);
+    setTipsData('');
   };
 
   const resetTaskState = () => {
@@ -132,7 +148,8 @@ const Dashboard = () => {
       setFieldNotes(pendingDbData.fieldNotes || []);
       setFieldLanguages(pendingDbData.fieldLanguages || []);
       setDetectedLang(pendingDbData.detectedLang || '');
-setTransliteratedTexts(pendingDbData.transliteratedTexts || []);
+      setTransliteratedTexts(pendingDbData.transliteratedTexts || []);
+      setTipsData(pendingDbData.tipsData || '');
 
       if (pendingDbData.smartLocalizedData) {
         setViewMode('smartLocalized');
@@ -211,6 +228,7 @@ setTransliteratedTexts(pendingDbData.transliteratedTexts || []);
             fieldNotes,
             fieldLanguages,
             detectedLang: detectedSourceLanguage,
+            tipsData: tipsData,
           }, { merge: true });
 
           setIsCached(true);
@@ -243,13 +261,13 @@ setTransliteratedTexts(pendingDbData.transliteratedTexts || []);
       });
 
       const {
-  localizedTexts,
-  transliteratedTexts: aiTransliteratedTexts,
-  spellingIssues: aiSpellingIssues,
-  fieldNotes: aiFieldNotes,
-  fieldLanguages: aiFieldLanguages,
-  detectedSourceLanguage,
-} = await smartLocalizeTaskFields(textsToLocalize, 'AUTO');
+        localizedTexts,
+        transliteratedTexts: aiTransliteratedTexts,
+        spellingIssues: aiSpellingIssues,
+        fieldNotes: aiFieldNotes,
+        fieldLanguages: aiFieldLanguages,
+        detectedSourceLanguage,
+      } = await smartLocalizeTaskFields(textsToLocalize, 'AUTO');
 
       let ptr = 0;
 
@@ -279,15 +297,16 @@ setTransliteratedTexts(pendingDbData.transliteratedTexts || []);
       if (newSmartLocalizedTask.requestId && newSmartLocalizedTask.requestId !== 'N/A') {
         try {
           await setDoc(doc(db, 'tasks', newSmartLocalizedTask.requestId), {
-  originalData: originalTask,
-  translatedData: translatedTask || null,
-  smartLocalizedData: newSmartLocalizedTask,
-  spellingIssues: aiSpellingIssues || [],
-  fieldNotes: aiFieldNotes || [],
-  fieldLanguages: aiFieldLanguages || [],
-  transliteratedTexts: aiTransliteratedTexts || [],
-  detectedLang: finalDetectedLang,
-}, { merge: true });
+            originalData: originalTask,
+            translatedData: translatedTask || null,
+            smartLocalizedData: newSmartLocalizedTask,
+            spellingIssues: aiSpellingIssues || [],
+            fieldNotes: aiFieldNotes || [],
+            fieldLanguages: aiFieldLanguages || [],
+            transliteratedTexts: aiTransliteratedTexts || [],
+            detectedLang: finalDetectedLang,
+            tipsData: tipsData,
+          }, { merge: true });
 
           setIsCached(true);
         } catch (dbErr) {
@@ -302,10 +321,52 @@ setTransliteratedTexts(pendingDbData.transliteratedTexts || []);
     }
   };
 
+  // --- NEW FUNCTION: Handle Fetching Tips ---
+  const handleGetTips = async () => {
+    if (!smartLocalizedTask) return;
+    setIsGettingTips(true);
+    setTransError('');
+    
+    try {
+      const response = await fetch('/api/get-rating-tips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: smartLocalizedTask.query,
+          taskType: smartLocalizedTask.taskType,
+          userLatLng: smartLocalizedTask.userLatLng || smartLocalizedTask.mapCenterLatLng,
+          results: smartLocalizedTask.results
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to load tips');
+      
+      setTipsData(data.tips);
+      setViewMode('tips'); // Automatically switch to the tips tab
+
+      // Save to Firebase so the tips are cached
+      if (smartLocalizedTask.requestId && smartLocalizedTask.requestId !== 'N/A') {
+        try {
+          await setDoc(doc(db, 'tasks', smartLocalizedTask.requestId), {
+            tipsData: data.tips
+          }, { merge: true });
+        } catch (dbErr) {
+          console.error('Failed to save tips to Firebase:', dbErr);
+        }
+      }
+
+    } catch (err) {
+      setTransError('Error fetching tips: ' + err.message);
+    } finally {
+      setIsGettingTips(false);
+    }
+  };
+
   const activeTask =
     viewMode === 'translated' && translatedTask
       ? translatedTask
-      : (viewMode === 'smartLocalized' || viewMode === 'compare') && smartLocalizedTask
+      : (viewMode === 'smartLocalized' || viewMode === 'compare' || viewMode === 'tips') && smartLocalizedTask
         ? smartLocalizedTask
         : originalTask;
 
@@ -346,98 +407,178 @@ setTransliteratedTexts(pendingDbData.transliteratedTexts || []);
     );
   };
 
-const CompareField = ({ label, originalValue, smartValue, inputIndex }) => {
-  const transliteration = transliteratedTexts[inputIndex];
-  const spellingIssue = spellingIssues.find((issue) => issue.inputIndex === inputIndex);
+  const CompareField = ({ label, originalValue, smartValue, inputIndex }) => {
+    const transliteration = transliteratedTexts[inputIndex];
+    const spellingIssue = spellingIssues.find((issue) => issue.inputIndex === inputIndex);
 
-  const shouldShowTransliteration =
-    transliteration &&
-    transliteration.trim() &&
-    transliteration.trim() !== String(originalValue || '').trim();
+    const shouldShowTransliteration =
+      transliteration &&
+      transliteration.trim() &&
+      transliteration.trim() !== String(originalValue || '').trim();
 
-  return (
-    <div style={{ borderBottom: '1px solid #eee', padding: '10px 0' }}>
-      <div style={{ fontWeight: 'bold', color: '#555', marginBottom: '6px' }}>{label}</div>
+    return (
+      <div style={{ borderBottom: '1px solid #eee', padding: '10px 0' }}>
+        <div style={{ fontWeight: 'bold', color: '#555', marginBottom: '6px' }}>{label}</div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-        <div>
-          <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold', marginBottom: '2px' }}>Original</div>
-          <div>{originalValue || '-'}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div>
+            <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold', marginBottom: '2px' }}>Original</div>
+            <div>{originalValue || '-'}</div>
 
-          {shouldShowTransliteration && (
-            <div style={{ marginTop: '6px' }}>
-              <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold' }}>Read as</div>
-              <div style={{ color: '#0f3460', fontWeight: 'bold' }}>{transliteration}</div>
-            </div>
-          )}
+            {shouldShowTransliteration && (
+              <div style={{ marginTop: '6px' }}>
+                <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold' }}>Read as</div>
+                <div style={{ color: '#0f3460', fontWeight: 'bold' }}>{transliteration}</div>
+              </div>
+            )}
 
-          {spellingIssue && (
-            <div style={{
-              marginTop: '8px',
-              backgroundColor: '#fff3cd',
-              border: '1px solid #ffecb5',
-              color: '#664d03',
-              padding: '7px 8px',
-              borderRadius: '6px',
-              fontSize: '12px',
-              lineHeight: 1.35,
-            }}>
-              <div><strong>Possible spelling issue</strong></div>
-              <div><strong>Raw:</strong> {spellingIssue.originalWord || '-'}</div>
-              <div><strong>Read as:</strong> {spellingIssue.actualTransliteration || '-'}</div>
-              <div><strong>Suggested:</strong> {spellingIssue.suggestedWord || '-'}</div>
-              {spellingIssue.severity && <div><strong>Severity:</strong> {spellingIssue.severity}</div>}
-              {spellingIssue.reason && <div><strong>Reason:</strong> {spellingIssue.reason}</div>}
-            </div>
-          )}
-        </div>
+            {spellingIssue && (
+              <div style={{
+                marginTop: '8px',
+                backgroundColor: '#fff3cd',
+                border: '1px solid #ffecb5',
+                color: '#664d03',
+                padding: '7px 8px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                lineHeight: 1.35,
+              }}>
+                <div><strong>Possible spelling issue</strong></div>
+                <div><strong>Raw:</strong> {spellingIssue.originalWord || '-'}</div>
+                <div><strong>Read as:</strong> {spellingIssue.actualTransliteration || '-'}</div>
+                <div><strong>Suggested:</strong> {spellingIssue.suggestedWord || '-'}</div>
+                {spellingIssue.severity && <div><strong>Severity:</strong> {spellingIssue.severity}</div>}
+                {spellingIssue.reason && <div><strong>Reason:</strong> {spellingIssue.reason}</div>}
+              </div>
+            )}
+          </div>
 
-        <div>
-          <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold', marginBottom: '2px' }}>Smart English</div>
-          <div style={{ color: '#0f3460', fontWeight: 'bold' }}>{smartValue || '-'}</div>
-          {renderFieldMeta(inputIndex)}
+          <div>
+            <div style={{ fontSize: '11px', color: '#777', fontWeight: 'bold', marginBottom: '2px' }}>Smart English</div>
+            <div style={{ color: '#0f3460', fontWeight: 'bold' }}>{smartValue || '-'}</div>
+            {renderFieldMeta(inputIndex)}
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
   return (
-    <div style={{ fontFamily: 'Segoe UI, sans-serif', backgroundColor: '#f0f2f5', minHeight: '100vh', margin: 0, padding: 0 }}>
+    <div style={{ fontFamily: 'Segoe UI, sans-serif', backgroundColor: APP_THEME.pageBg, minHeight: '100vh', margin: 0, padding: 0, color: APP_THEME.textMain }}>      
       {showDbModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', maxWidth: '400px', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
-            <h3 style={{ marginTop: 0 }}>Task Found in Database</h3>
-            <p style={{ color: '#555', marginBottom: '25px' }}>This Request ID has already been processed previously. Would you like to load the saved data?</p>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button onClick={handleRejectDb} style={{ padding: '10px 15px', border: '1px solid #ccc', backgroundColor: '#f8f9fa', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Ignore & Use New Paste</button>
-              <button onClick={handleAcceptDb} style={{ padding: '10px 15px', border: 'none', backgroundColor: '#0d6efd', color: 'white', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Load from Database</button>
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+        <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', maxWidth: '400px', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+          <h3 style={{ marginTop: 0 }}>Task Found in Database</h3>
+          <p style={{ color: '#555', marginBottom: '25px' }}>This Request ID has already been processed previously. Would you like to load the saved data?</p>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <button onClick={handleRejectDb} style={{ padding: '10px 15px', border: '1px solid #ccc', backgroundColor: '#f8f9fa', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Ignore & Use New Paste</button>
+            <button onClick={handleAcceptDb} style={{ padding: '10px 15px', border: 'none', backgroundColor: '#0d6efd', color: 'white', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Load from Database</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+      <div style={{
+        backgroundColor: APP_THEME.topBar,
+        color: 'white',
+        padding: '14px 26px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxShadow: '0 2px 10px rgba(15, 23, 42, 0.18)',
+        borderBottom: `3px solid ${APP_THEME.topBarAccent}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            width: '10px',
+            height: '28px',
+            backgroundColor: APP_THEME.topBarAccent,
+            borderRadius: '2px',
+          }} />
+          <div>
+            <div style={{ fontSize: '17px', fontWeight: '800', letterSpacing: '0' }}>
+              Rating Workflow Dashboard
+            </div>
+            <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '2px' }}>
+              Multilingual map task assistant
             </div>
           </div>
         </div>
-      )}
 
-      <div style={{ backgroundColor: '#1a1a2e', color: 'white', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontSize: '16px', fontWeight: 'bold' }}>Rating Workflow Dashboard</div>
-        {originalTask && (
-          <button onClick={resetTaskState} style={{ backgroundColor: '#e94560', color: 'white', border: 'none', padding: '6px 12px', cursor: 'pointer', borderRadius: '4px' }}>
-            Reset Interface
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* We removed the old Rating Tips button from up here since it will now live next to Smart English */}
+          
+          {originalTask && (
+            <button
+              onClick={resetTaskState}
+              style={{
+                backgroundColor: APP_THEME.danger,
+                color: 'white',
+                border: 'none',
+                padding: '8px 14px',
+                cursor: 'pointer',
+                borderRadius: '6px',
+                fontWeight: '700',
+              }}
+            >
+              Reset Interface
+            </button>
+          )}
+        </div>
       </div>
 
       {!originalTask ? (
-        <div style={{ maxWidth: '800px', margin: '40px auto', padding: '20px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-          <h2 style={{ marginTop: 0 }}>Paste Task Data</h2>
+        <div style={{
+          maxWidth: '980px',
+          margin: '50px auto',
+          padding: '26px',
+          backgroundColor: APP_THEME.panelBg,
+          borderRadius: '10px',
+          border: `1px solid ${APP_THEME.panelBorder}`,
+          boxShadow: '0 14px 35px rgba(15, 23, 42, 0.10)',
+        }}>        
+          <div style={{ marginBottom: '18px' }}>
+            <h2 style={{ margin: 0, fontSize: '26px', color: APP_THEME.textMain }}>
+              Paste Task Data
+            </h2>
+            <div style={{ marginTop: '6px', color: APP_THEME.textMuted, fontSize: '13px' }}>
+              Paste AC or SM task text to parse, map, and localize.
+            </div>
+          </div>
 
           <textarea
             rows="12"
             value={rawData}
             onChange={(e) => setRawData(e.target.value)}
-            style={{ width: '100%', padding: '12px', border: '1px solid #ccc', fontFamily: 'monospace' }}
-          />
+            style={{
+              width: '100%',
+              padding: '14px',
+              border: `1px solid ${APP_THEME.panelBorder}`,
+              borderRadius: '8px',
+              fontFamily: 'Consolas, monospace',
+              fontSize: '13px',
+              lineHeight: 1.45,
+              outline: 'none',
+              boxSizing: 'border-box',
+              backgroundColor: '#fbfdff',
+            }} />
 
-          <button onClick={handleProcessTask} disabled={isCheckingDB} style={{ width: '100%', padding: '12px', marginTop: '15px', backgroundColor: '#0f3460', color: 'white', cursor: isCheckingDB ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
+         <button
+            onClick={handleProcessTask}
+            disabled={isCheckingDB}
+            style={{
+              width: '100%',
+              padding: '13px',
+              marginTop: '18px',
+              backgroundColor: APP_THEME.primary,
+              color: 'white',
+              cursor: isCheckingDB ? 'not-allowed' : 'pointer',
+              fontWeight: '800',
+              border: 'none',
+              borderRadius: '8px',
+              boxShadow: '0 6px 14px rgba(23, 74, 124, 0.22)',
+            }}
+          >
             {isCheckingDB ? 'Checking Database...' : 'Extract & Build Layout'}
           </button>
 
@@ -454,7 +595,19 @@ const CompareField = ({ label, originalValue, smartValue, inputIndex }) => {
           </div>
 
           <div style={{ width: '55%', backgroundColor: 'white', overflowY: 'auto', padding: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#e3f2fd', padding: '10px 15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #b6d4fe', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: '#f8fbff',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              border: `1px solid ${APP_THEME.panelBorder}`,
+              boxShadow: '0 8px 20px rgba(15, 23, 42, 0.06)',
+              gap: '10px',
+              flexWrap: 'wrap',
+            }}>              
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 {isCached && <span style={{ fontSize: '13px', color: '#198754', fontWeight: 'bold', marginRight: '5px', backgroundColor: '#d1e7dd', padding: '4px 8px', borderRadius: '4px' }}>DB Archive</span>}
 
@@ -472,6 +625,25 @@ const CompareField = ({ label, originalValue, smartValue, inputIndex }) => {
                   {isSmartLocalizing ? 'Checking...' : 'Smart English'}
                 </button>
 
+                {/* THE NEW RATING TIPS BUTTON NOW APPEARS HERE AFTER SMART LOCALIZE IS RUN */}
+                {smartLocalizedTask && (
+                   <button 
+                     onClick={handleGetTips} 
+                     disabled={isGettingTips} 
+                     style={{ 
+                       backgroundColor: '#f59e0b', 
+                       color: '#111827', 
+                       border: 'none', 
+                       padding: '8px 16px', 
+                       borderRadius: '4px', 
+                       cursor: isGettingTips ? 'not-allowed' : 'pointer', 
+                       fontWeight: 'bold' 
+                     }}
+                   >
+                     {isGettingTips ? 'Analyzing Rules...' : 'Get Rating Tips'}
+                   </button>
+                )}
+
                 {detectedLang && (
                   <span style={{ fontSize: '13px', color: '#084298', fontWeight: 'bold', marginLeft: '5px' }}>
                     Detected: {getLanguageLabel(detectedLang)}
@@ -479,7 +651,7 @@ const CompareField = ({ label, originalValue, smartValue, inputIndex }) => {
                 )}
               </div>
 
-              <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '4px', border: '1px solid #ccc', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '4px', border: '1px solid #ccc', overflow: 'hidden', marginTop: '10px' }}>
                 <button onClick={() => setViewMode('original')} style={{ padding: '6px 12px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: viewMode === 'original' ? '#0f3460' : 'transparent', color: viewMode === 'original' ? 'white' : '#555' }}>
                   Raw Data
                 </button>
@@ -492,27 +664,58 @@ const CompareField = ({ label, originalValue, smartValue, inputIndex }) => {
                   Smart English
                 </button>
 
-               <button
-  onClick={() => setViewMode('compare')}
-  disabled={!smartLocalizedTask}
-  style={{
-    padding: '6px 14px',
-    border: 'none',
-    cursor: smartLocalizedTask ? 'pointer' : 'not-allowed',
-    fontWeight: 'bold',
-    backgroundColor: viewMode === 'compare' && smartLocalizedTask ? '#0f766e' : '#ecfeff',
-    color: viewMode === 'compare' && smartLocalizedTask ? 'white' : smartLocalizedTask ? '#0f766e' : '#aaa',
-    borderLeft: '1px solid #bae6fd',
-    boxShadow: viewMode === 'compare' && smartLocalizedTask ? 'inset 0 -2px 0 rgba(0,0,0,0.18)' : 'none',
-  }}
->
-  Compare
-</button>
+                <button
+                  onClick={() => setViewMode('compare')}
+                  disabled={!smartLocalizedTask}
+                  style={{
+                    padding: '6px 14px',
+                    border: 'none',
+                    cursor: smartLocalizedTask ? 'pointer' : 'not-allowed',
+                    fontWeight: 'bold',
+                    backgroundColor: viewMode === 'compare' && smartLocalizedTask ? '#0f766e' : 'transparent',
+                    color: viewMode === 'compare' && smartLocalizedTask ? 'white' : smartLocalizedTask ? '#0f766e' : '#aaa',
+                    borderLeft: '1px solid #bae6fd',
+                    boxShadow: viewMode === 'compare' && smartLocalizedTask ? 'inset 0 -2px 0 rgba(0,0,0,0.18)' : 'none',
+                  }}
+                >
+                  Compare
+                </button>
+                
+                {/* THE NEW TIPS TAB */}
+                <button
+                  onClick={() => setViewMode('tips')}
+                  disabled={!tipsData}
+                  style={{
+                    padding: '6px 14px',
+                    border: 'none',
+                    cursor: tipsData ? 'pointer' : 'not-allowed',
+                    fontWeight: 'bold',
+                    backgroundColor: viewMode === 'tips' && tipsData ? '#b45309' : 'transparent',
+                    color: viewMode === 'tips' && tipsData ? 'white' : tipsData ? '#b45309' : '#aaa',
+                    borderLeft: '1px solid #bae6fd',
+                    boxShadow: viewMode === 'tips' && tipsData ? 'inset 0 -2px 0 rgba(0,0,0,0.18)' : 'none',
+                  }}
+                >
+                  Rating Guide
+                </button>
               </div>
             </div>
 
-            {transError && <p style={{ color: '#dc3545', fontWeight: 'bold' }}>{transError}</p>}
+            {transError && <p style={{ color: '#dc3545', fontWeight: 'bold', padding: '10px', backgroundColor: '#f8d7da', borderRadius: '4px' }}>{transError}</p>}
 
+            {/* --- NEW VIEW: THE RATING TIPS TAB --- */}
+            {viewMode === 'tips' && tipsData && (
+              <div style={{ backgroundColor: '#fff', border: '1px solid #f59e0b', borderRadius: '8px', padding: '20px', boxShadow: '0 4px 15px rgba(245, 158, 11, 0.1)' }}>
+                <h3 style={{ marginTop: 0, color: '#b45309', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>🎯</span> Smart Evaluation Guide
+                </h3>
+                <div style={{ color: '#333', fontSize: '14.5px', lineHeight: '1.7', whiteSpace: 'pre-wrap', backgroundColor: '#fdfcbc', padding: '15px', borderRadius: '6px', border: '1px solid #fef08a' }}>
+                  {tipsData}
+                </div>
+              </div>
+            )}
+
+            {/* Existing Warning Message UI */}
             {viewMode === 'smartLocalized' && spellingIssues.length > 0 && (
               <div style={{ backgroundColor: '#fff3cd', border: '1px solid #ffecb5', color: '#664d03', padding: '10px 12px', borderRadius: '6px', marginBottom: '15px', fontSize: '13px' }}>
                 <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
@@ -533,27 +736,31 @@ const CompareField = ({ label, originalValue, smartValue, inputIndex }) => {
               </div>
             )}
 
-            <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #e9ecef', fontSize: '13px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ddd', paddingBottom: '10px', marginBottom: '10px' }}>
-                <div><strong>Task Type:</strong> {activeTask.taskType}</div>
-                <div><strong>Request ID:</strong> {activeTask.requestId}</div>
-                <div><strong>Time:</strong> {activeTask.estimatedTime}</div>
+            {/* Existing Task Metadata UI */}
+            {viewMode !== 'tips' && (
+              <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #e9ecef', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ddd', paddingBottom: '10px', marginBottom: '10px' }}>
+                  <div><strong>Task Type:</strong> {activeTask.taskType}</div>
+                  <div><strong>Request ID:</strong> {activeTask.requestId}</div>
+                  <div><strong>Time:</strong> {activeTask.estimatedTime}</div>
+                </div>
+
+                <div style={{ margin: '6px 0' }}>
+                  <strong>Query:</strong>{' '}
+                  <span style={{ color: '#0f3460', fontWeight: 'bold', fontSize: '15px' }}>{activeTask.query}</span>
+
+                  {viewMode === 'smartLocalized' && querySpellingIssue && (
+                    <div style={{ marginTop: '8px', backgroundColor: '#fff3cd', border: '1px solid #ffecb5', color: '#664d03', padding: '8px', borderRadius: '6px', fontSize: '12px' }}>
+                      <strong>Possible query spelling issue:</strong>{' '}
+                      {querySpellingIssue.originalWord || '-'} {' -> '} {querySpellingIssue.suggestedWord || '-'}
+                      {querySpellingIssue.reason ? ` (${querySpellingIssue.reason})` : ''}
+                    </div>
+                  )}
+                </div>
               </div>
+            )}
 
-              <div style={{ margin: '6px 0' }}>
-                <strong>Query:</strong>{' '}
-                <span style={{ color: '#0f3460', fontWeight: 'bold', fontSize: '15px' }}>{activeTask.query}</span>
-
-                {viewMode === 'smartLocalized' && querySpellingIssue && (
-                  <div style={{ marginTop: '8px', backgroundColor: '#fff3cd', border: '1px solid #ffecb5', color: '#664d03', padding: '8px', borderRadius: '6px', fontSize: '12px' }}>
-                    <strong>Possible query spelling issue:</strong>{' '}
-                    {querySpellingIssue.originalWord || '-'} {' -> '} {querySpellingIssue.suggestedWord || '-'}
-                    {querySpellingIssue.reason ? ` (${querySpellingIssue.reason})` : ''}
-                  </div>
-                )}
-              </div>
-            </div>
-
+            {/* Existing Compare UI */}
             {viewMode === 'compare' && originalTask && smartLocalizedTask ? (
               <>
                 <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #e9ecef' }}>
@@ -581,7 +788,8 @@ const CompareField = ({ label, originalValue, smartValue, inputIndex }) => {
                   );
                 })}
               </>
-            ) : (
+            ) : viewMode !== 'tips' ? (
+              /* Existing Standard UI */
               activeTask.results.map((result, idx) => {
                 const baseIndex = 1 + idx * 5;
 
@@ -602,7 +810,7 @@ const CompareField = ({ label, originalValue, smartValue, inputIndex }) => {
                   />
                 );
               })
-            )}
+            ) : null}
           </div>
         </div>
       )}
