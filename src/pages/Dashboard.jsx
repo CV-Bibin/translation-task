@@ -595,112 +595,123 @@ const Dashboard = () => {
           </div>
 
           <div style={{ width: '55%', backgroundColor: 'white', overflowY: 'auto', padding: '20px' }}>
+            {/* --- NEW SEPARATED CONTROL PANEL HEADER --- */}
             <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
               backgroundColor: '#f8fbff',
-              padding: '12px 16px',
+              padding: '16px 20px',
               borderRadius: '8px',
               marginBottom: '20px',
               border: `1px solid ${APP_THEME.panelBorder}`,
-              boxShadow: '0 8px 20px rgba(15, 23, 42, 0.06)',
-              gap: '10px',
-              flexWrap: 'wrap',
-            }}>              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                {isCached && <span style={{ fontSize: '13px', color: '#198754', fontWeight: 'bold', marginRight: '5px', backgroundColor: '#d1e7dd', padding: '4px 8px', borderRadius: '4px' }}>DB Archive</span>}
+              boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)',
+            }}>
+              
+              {/* TOP ROW: Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                
+                {/* Left Side: Translation/Localization Tools */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  {isCached && <span style={{ fontSize: '13px', color: '#198754', fontWeight: 'bold', marginRight: '5px', backgroundColor: '#d1e7dd', padding: '4px 8px', borderRadius: '4px' }}>DB Archive</span>}
 
-                <select value={targetLang} onChange={(e) => setTargetLang(e.target.value)} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>
-                  {SUPPORTED_LANGUAGES.map((lang) => (
-                    <option key={lang.code} value={lang.code}>{lang.name}</option>
-                  ))}
-                </select>
+                  <select value={targetLang} onChange={(e) => setTargetLang(e.target.value)} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                      <option key={lang.code} value={lang.code}>{lang.name}</option>
+                    ))}
+                  </select>
 
-                <button onClick={handleTranslate} disabled={isTranslating} style={{ backgroundColor: '#0d6efd', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: isTranslating ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
-                  {isTranslating ? 'Translating...' : 'Translate'}
-                </button>
+                  <button onClick={handleTranslate} disabled={isTranslating} style={{ backgroundColor: '#0d6efd', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: isTranslating ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
+                    {isTranslating ? 'Translating...' : 'Translate'}
+                  </button>
 
-                <button onClick={handleSmartLocalize} disabled={isSmartLocalizing} style={{ backgroundColor: '#6f42c1', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: isSmartLocalizing ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
-                  {isSmartLocalizing ? 'Checking...' : 'Smart English'}
-                </button>
+                  <button onClick={handleSmartLocalize} disabled={isSmartLocalizing} style={{ backgroundColor: '#6f42c1', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: isSmartLocalizing ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
+                    {isSmartLocalizing ? 'Checking...' : 'Smart English'}
+                  </button>
+                </div>
 
-                {/* THE NEW RATING TIPS BUTTON NOW APPEARS HERE AFTER SMART LOCALIZE IS RUN */}
-                {smartLocalizedTask && (
-                   <button 
-                     onClick={handleGetTips} 
-                     disabled={isGettingTips} 
-                     style={{ 
-                       backgroundColor: '#f59e0b', 
-                       color: '#111827', 
-                       border: 'none', 
-                       padding: '8px 16px', 
-                       borderRadius: '4px', 
-                       cursor: isGettingTips ? 'not-allowed' : 'pointer', 
-                       fontWeight: 'bold' 
-                     }}
-                   >
-                     {isGettingTips ? 'Analyzing Rules...' : 'Get Rating Tips'}
-                   </button>
-                )}
-
-                {detectedLang && (
-                  <span style={{ fontSize: '13px', color: '#084298', fontWeight: 'bold', marginLeft: '5px' }}>
-                    Detected: {getLanguageLabel(detectedLang)}
-                  </span>
-                )}
+                {/* Right Side: Meta Tools (Tips & Lang Detection) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {detectedLang && (
+                    <span style={{ fontSize: '13px', color: '#084298', fontWeight: 'bold' }}>
+                      Detected: {getLanguageLabel(detectedLang)}
+                    </span>
+                  )}
+                  
+                  {smartLocalizedTask && (
+                     <button 
+                       onClick={handleGetTips} 
+                       disabled={isGettingTips} 
+                       style={{ 
+                         backgroundColor: '#f59e0b', 
+                         color: '#111827', 
+                         border: 'none', 
+                         padding: '8px 16px', 
+                         borderRadius: '6px', 
+                         cursor: isGettingTips ? 'not-allowed' : 'pointer', 
+                         fontWeight: 'bold',
+                         boxShadow: '0 2px 6px rgba(245, 158, 11, 0.2)'
+                       }}
+                     >
+                       {isGettingTips ? 'Analyzing Rules...' : 'Get Rating Tips'}
+                     </button>
+                  )}
+                </div>
               </div>
 
-              <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '4px', border: '1px solid #ccc', overflow: 'hidden', marginTop: '10px' }}>
-                <button onClick={() => setViewMode('original')} style={{ padding: '6px 12px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: viewMode === 'original' ? '#0f3460' : 'transparent', color: viewMode === 'original' ? 'white' : '#555' }}>
-                  Raw Data
-                </button>
-
-                <button onClick={() => setViewMode('translated')} disabled={!translatedTask} style={{ padding: '6px 12px', border: 'none', cursor: translatedTask ? 'pointer' : 'not-allowed', fontWeight: 'bold', backgroundColor: viewMode === 'translated' && translatedTask ? '#0f3460' : 'transparent', color: viewMode === 'translated' && translatedTask ? 'white' : '#aaa' }}>
-                  Translated
-                </button>
-
-                <button onClick={() => setViewMode('smartLocalized')} disabled={!smartLocalizedTask} style={{ padding: '6px 12px', border: 'none', cursor: smartLocalizedTask ? 'pointer' : 'not-allowed', fontWeight: 'bold', backgroundColor: viewMode === 'smartLocalized' && smartLocalizedTask ? '#0f3460' : 'transparent', color: viewMode === 'smartLocalized' && smartLocalizedTask ? 'white' : '#aaa' }}>
-                  Smart English
-                </button>
-
-                <button
-                  onClick={() => setViewMode('compare')}
-                  disabled={!smartLocalizedTask}
-                  style={{
-                    padding: '6px 14px',
-                    border: 'none',
-                    cursor: smartLocalizedTask ? 'pointer' : 'not-allowed',
-                    fontWeight: 'bold',
-                    backgroundColor: viewMode === 'compare' && smartLocalizedTask ? '#0f766e' : 'transparent',
-                    color: viewMode === 'compare' && smartLocalizedTask ? 'white' : smartLocalizedTask ? '#0f766e' : '#aaa',
-                    borderLeft: '1px solid #bae6fd',
-                    boxShadow: viewMode === 'compare' && smartLocalizedTask ? 'inset 0 -2px 0 rgba(0,0,0,0.18)' : 'none',
-                  }}
-                >
-                  Compare
-                </button>
+              {/* BOTTOM ROW: Tabs */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
                 
-                {/* THE NEW TIPS TAB */}
-                <button
-                  onClick={() => setViewMode('tips')}
-                  disabled={!tipsData}
-                  style={{
-                    padding: '6px 14px',
-                    border: 'none',
-                    cursor: tipsData ? 'pointer' : 'not-allowed',
-                    fontWeight: 'bold',
-                    backgroundColor: viewMode === 'tips' && tipsData ? '#b45309' : 'transparent',
-                    color: viewMode === 'tips' && tipsData ? 'white' : tipsData ? '#b45309' : '#aaa',
-                    borderLeft: '1px solid #bae6fd',
-                    boxShadow: viewMode === 'tips' && tipsData ? 'inset 0 -2px 0 rgba(0,0,0,0.18)' : 'none',
-                  }}
-                >
-                  Rating Guide
-                </button>
+                {/* Left Side: Data View Tabs */}
+                <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #ccc', overflow: 'hidden' }}>
+                  <button onClick={() => setViewMode('original')} style={{ padding: '6px 14px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: viewMode === 'original' ? '#0f3460' : 'transparent', color: viewMode === 'original' ? 'white' : '#555' }}>
+                    Raw Data
+                  </button>
+
+                  <button onClick={() => setViewMode('translated')} disabled={!translatedTask} style={{ padding: '6px 14px', border: 'none', cursor: translatedTask ? 'pointer' : 'not-allowed', fontWeight: 'bold', backgroundColor: viewMode === 'translated' && translatedTask ? '#0f3460' : 'transparent', color: viewMode === 'translated' && translatedTask ? 'white' : '#aaa' }}>
+                    Translated
+                  </button>
+
+                  <button onClick={() => setViewMode('smartLocalized')} disabled={!smartLocalizedTask} style={{ padding: '6px 14px', border: 'none', cursor: smartLocalizedTask ? 'pointer' : 'not-allowed', fontWeight: 'bold', backgroundColor: viewMode === 'smartLocalized' && smartLocalizedTask ? '#0f3460' : 'transparent', color: viewMode === 'smartLocalized' && smartLocalizedTask ? 'white' : '#aaa' }}>
+                    Smart English
+                  </button>
+
+                  <button
+                    onClick={() => setViewMode('compare')}
+                    disabled={!smartLocalizedTask}
+                    style={{
+                      padding: '6px 14px',
+                      border: 'none',
+                      cursor: smartLocalizedTask ? 'pointer' : 'not-allowed',
+                      fontWeight: 'bold',
+                      backgroundColor: viewMode === 'compare' && smartLocalizedTask ? '#0f766e' : 'transparent',
+                      color: viewMode === 'compare' && smartLocalizedTask ? 'white' : smartLocalizedTask ? '#0f766e' : '#aaa',
+                      borderLeft: '1px solid #bae6fd',
+                    }}
+                  >
+                    Compare
+                  </button>
+                </div>
+
+                {/* Right Side: Rating Guide Tab */}
+                {tipsData && (
+                  <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #fcd34d', overflow: 'hidden', boxShadow: '0 2px 4px rgba(245, 158, 11, 0.1)' }}>
+                    <button
+                      onClick={() => setViewMode('tips')}
+                      disabled={!tipsData}
+                      style={{
+                        padding: '6px 16px',
+                        border: 'none',
+                        cursor: tipsData ? 'pointer' : 'not-allowed',
+                        fontWeight: 'bold',
+                        backgroundColor: viewMode === 'tips' && tipsData ? '#b45309' : '#fef3c7',
+                        color: viewMode === 'tips' && tipsData ? 'white' : '#b45309',
+                      }}
+                    >
+                      ★ Rating Guide
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
-
+            {/* --- END OF CONTROL PANEL HEADER --- */}
             {transError && <p style={{ color: '#dc3545', fontWeight: 'bold', padding: '10px', backgroundColor: '#f8d7da', borderRadius: '4px' }}>{transError}</p>}
 
             {/* --- NEW VIEW: THE RATING TIPS TAB --- */}
