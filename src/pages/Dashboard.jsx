@@ -731,7 +731,7 @@ const Dashboard = () => {
                 </h3>
                 
                 {/* 1. Location Intent Header */}
-                <div style={{ backgroundColor: '#fdfcbc', padding: '15px', borderRadius: '6px', border: '1px solid #fef08a', marginBottom: '20px' }}>
+                <div style={{ backgroundColor: '#ffffff', padding: '15px', borderRadius: '6px', border: '1px solid #fef08a', marginBottom: '20px' }}>
                   <h4 style={{ margin: '0 0 8px 0', color: '#92400e', fontSize: '15px' }}>
                     📍 Location Intent: {tipsData.locationIntentDecision || 'Unknown'}
                   </h4>
