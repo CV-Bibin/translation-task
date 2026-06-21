@@ -774,7 +774,7 @@ const Dashboard = () => {
             {/* Existing Compare UI */}
             {viewMode === 'compare' && originalTask && smartLocalizedTask ? (
               <>
-                <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #e9ecef' }}>
+                <div style={{ backgroundColor: '#f2ec97', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #e9ecef' }}>
                   <CompareField label="Query" originalValue={originalTask.query} smartValue={smartLocalizedTask.query} inputIndex={0} />
                 </div>
 
