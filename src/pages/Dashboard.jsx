@@ -58,12 +58,14 @@ const Dashboard = () => {
   const [translatedTask, setTranslatedTask] = useState(null);
   const [smartLocalizedTask, setSmartLocalizedTask] = useState(null);
   // viewMode can now be: 'original', 'translated', 'smartLocalized', 'compare', 'tips'
-  const [viewMode, setViewMode] = useState('original'); 
+  const [viewMode, setViewMode] = useState('original');
 
   const [isTranslating, setIsTranslating] = useState(false);
   const [isSmartLocalizing, setIsSmartLocalizing] = useState(false);
   const [isGettingTips, setIsGettingTips] = useState(false); // New state for tips loading
   const [tipsData, setTipsData] = useState(''); // New state to store generated tips
+  const [manualViewportLatLng, setManualViewportLatLng] = useState(null);
+  const [realMapData, setRealMapData] = useState([]);
 
   const [detectedLang, setDetectedLang] = useState('');
   const [transError, setTransError] = useState('');
@@ -321,8 +323,7 @@ const Dashboard = () => {
     }
   };
 
-  // --- NEW FUNCTION: Handle Fetching Tips ---
-  const handleGetTips = async () => {
+ const handleGetTips = async () => {
     if (!smartLocalizedTask) return;
     setIsGettingTips(true);
     setTransError('');
@@ -335,6 +336,8 @@ const Dashboard = () => {
           query: smartLocalizedTask.query,
           taskType: smartLocalizedTask.taskType,
           userLatLng: smartLocalizedTask.userLatLng || smartLocalizedTask.mapCenterLatLng,
+          viewportAge: smartLocalizedTask.viewportAge,
+          manualViewportLatLng: manualViewportLatLng, // Send the user's click data
           results: smartLocalizedTask.results
         })
       });
@@ -342,14 +345,15 @@ const Dashboard = () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to load tips');
       
-      setTipsData(data.tips);
-      setViewMode('tips'); // Automatically switch to the tips tab
+      setTipsData(data.evaluation); // The JSON rules evaluation
+      setRealMapData(data.realData || []); // The Ola Maps ground truth pins
+      setViewMode('tips'); 
 
-      // Save to Firebase so the tips are cached
       if (smartLocalizedTask.requestId && smartLocalizedTask.requestId !== 'N/A') {
         try {
           await setDoc(doc(db, 'tasks', smartLocalizedTask.requestId), {
-            tipsData: data.tips
+            tipsData: data.evaluation,
+            realMapData: data.realData || []
           }, { merge: true });
         } catch (dbErr) {
           console.error('Failed to save tips to Firebase:', dbErr);
@@ -464,19 +468,19 @@ const Dashboard = () => {
   };
 
   return (
-    <div style={{ fontFamily: 'Segoe UI, sans-serif', backgroundColor: APP_THEME.pageBg, minHeight: '100vh', margin: 0, padding: 0, color: APP_THEME.textMain }}>      
+    <div style={{ fontFamily: 'Segoe UI, sans-serif', backgroundColor: APP_THEME.pageBg, minHeight: '100vh', margin: 0, padding: 0, color: APP_THEME.textMain }}>
       {showDbModal && (
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-        <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', maxWidth: '400px', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
-          <h3 style={{ marginTop: 0 }}>Task Found in Database</h3>
-          <p style={{ color: '#555', marginBottom: '25px' }}>This Request ID has already been processed previously. Would you like to load the saved data?</p>
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-            <button onClick={handleRejectDb} style={{ padding: '10px 15px', border: '1px solid #ccc', backgroundColor: '#f8f9fa', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Ignore & Use New Paste</button>
-            <button onClick={handleAcceptDb} style={{ padding: '10px 15px', border: 'none', backgroundColor: '#0d6efd', color: 'white', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Load from Database</button>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', maxWidth: '400px', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ marginTop: 0 }}>Task Found in Database</h3>
+            <p style={{ color: '#555', marginBottom: '25px' }}>This Request ID has already been processed previously. Would you like to load the saved data?</p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button onClick={handleRejectDb} style={{ padding: '10px 15px', border: '1px solid #ccc', backgroundColor: '#f8f9fa', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Ignore & Use New Paste</button>
+              <button onClick={handleAcceptDb} style={{ padding: '10px 15px', border: 'none', backgroundColor: '#0d6efd', color: 'white', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Load from Database</button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
 
       <div style={{
         backgroundColor: APP_THEME.topBar,
@@ -507,7 +511,7 @@ const Dashboard = () => {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {/* We removed the old Rating Tips button from up here since it will now live next to Smart English */}
-          
+
           {originalTask && (
             <button
               onClick={resetTaskState}
@@ -536,7 +540,7 @@ const Dashboard = () => {
           borderRadius: '10px',
           border: `1px solid ${APP_THEME.panelBorder}`,
           boxShadow: '0 14px 35px rgba(15, 23, 42, 0.10)',
-        }}>        
+        }}>
           <div style={{ marginBottom: '18px' }}>
             <h2 style={{ margin: 0, fontSize: '26px', color: APP_THEME.textMain }}>
               Paste Task Data
@@ -563,7 +567,7 @@ const Dashboard = () => {
               backgroundColor: '#fbfdff',
             }} />
 
-         <button
+          <button
             onClick={handleProcessTask}
             disabled={isCheckingDB}
             style={{
@@ -587,10 +591,14 @@ const Dashboard = () => {
       ) : (
         <div style={{ display: 'flex', height: 'calc(100vh - 45px)' }}>
           <div style={{ width: '45%', borderRight: '2px solid #ccc', position: 'relative' }}>
-            <MapComponent
+           <MapComponent
               userLatLng={activeTask.userLatLng || activeTask.mapCenterLatLng}
               results={activeTask.results}
               resultColors={THEME_COLORS}
+              isTipsMode={viewMode === 'tips'}
+              manualViewportLatLng={manualViewportLatLng}
+              onMapClick={(coords) => setManualViewportLatLng(coords)}
+              realData={realMapData}
             />
           </div>
 
@@ -604,10 +612,10 @@ const Dashboard = () => {
               border: `1px solid ${APP_THEME.panelBorder}`,
               boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)',
             }}>
-              
+
               {/* TOP ROW: Action Buttons */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                
+
                 {/* Left Side: Translation/Localization Tools */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                   {isCached && <span style={{ fontSize: '13px', color: '#198754', fontWeight: 'bold', marginRight: '5px', backgroundColor: '#d1e7dd', padding: '4px 8px', borderRadius: '4px' }}>DB Archive</span>}
@@ -634,31 +642,31 @@ const Dashboard = () => {
                       Detected: {getLanguageLabel(detectedLang)}
                     </span>
                   )}
-                  
+
                   {smartLocalizedTask && (
-                     <button 
-                       onClick={handleGetTips} 
-                       disabled={isGettingTips} 
-                       style={{ 
-                         backgroundColor: '#f59e0b', 
-                         color: '#111827', 
-                         border: 'none', 
-                         padding: '8px 16px', 
-                         borderRadius: '6px', 
-                         cursor: isGettingTips ? 'not-allowed' : 'pointer', 
-                         fontWeight: 'bold',
-                         boxShadow: '0 2px 6px rgba(245, 158, 11, 0.2)'
-                       }}
-                     >
-                       {isGettingTips ? 'Analyzing Rules...' : 'Get Rating Tips'}
-                     </button>
+                    <button
+                      onClick={handleGetTips}
+                      disabled={isGettingTips}
+                      style={{
+                        backgroundColor: '#f59e0b',
+                        color: '#111827',
+                        border: 'none',
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        cursor: isGettingTips ? 'not-allowed' : 'pointer',
+                        fontWeight: 'bold',
+                        boxShadow: '0 2px 6px rgba(245, 158, 11, 0.2)'
+                      }}
+                    >
+                      {isGettingTips ? 'Analyzing Rules...' : 'Get Rating Tips'}
+                    </button>
                   )}
                 </div>
               </div>
 
               {/* BOTTOM ROW: Tabs */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
-                
+
                 {/* Left Side: Data View Tabs */}
                 <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #ccc', overflow: 'hidden' }}>
                   <button onClick={() => setViewMode('original')} style={{ padding: '6px 14px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: viewMode === 'original' ? '#0f3460' : 'transparent', color: viewMode === 'original' ? 'white' : '#555' }}>
@@ -715,14 +723,55 @@ const Dashboard = () => {
             {transError && <p style={{ color: '#dc3545', fontWeight: 'bold', padding: '10px', backgroundColor: '#f8d7da', borderRadius: '4px' }}>{transError}</p>}
 
             {/* --- NEW VIEW: THE RATING TIPS TAB --- */}
+            {/* --- NEW VIEW: THE RATING TIPS TAB --- */}
             {viewMode === 'tips' && tipsData && (
               <div style={{ backgroundColor: '#fff', border: '1px solid #f59e0b', borderRadius: '8px', padding: '20px', boxShadow: '0 4px 15px rgba(245, 158, 11, 0.1)' }}>
-                <h3 style={{ marginTop: 0, color: '#b45309', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ marginTop: 0, color: '#b45309', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '2px solid #fde68a', paddingBottom: '10px' }}>
                   <span>🎯</span> Smart Evaluation Guide
                 </h3>
-                <div style={{ color: '#333', fontSize: '14.5px', lineHeight: '1.7', whiteSpace: 'pre-wrap', backgroundColor: '#fdfcbc', padding: '15px', borderRadius: '6px', border: '1px solid #fef08a' }}>
-                  {tipsData}
+                
+                {/* 1. Location Intent Header */}
+                <div style={{ backgroundColor: '#fdfcbc', padding: '15px', borderRadius: '6px', border: '1px solid #fef08a', marginBottom: '20px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#92400e', fontSize: '15px' }}>
+                    📍 Location Intent: {tipsData.locationIntentDecision || 'Unknown'}
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '13.5px', color: '#555', lineHeight: '1.5' }}>
+                    {tipsData.locationIntentReason || 'Check user and viewport rules.'}
+                  </p>
                 </div>
+
+                {/* 2. Individual Result Evaluations */}
+                <h4 style={{ color: '#0f3460', marginBottom: '12px', fontSize: '16px' }}>Result Breakdown</h4>
+                
+                {tipsData.resultEvaluations?.map((resEval, idx) => (
+                  <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '16px', backgroundColor: '#f8fafc' }}>
+                    <h5 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>
+                      Result {resEval.resultNumber}
+                    </h5>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px', marginBottom: '12px' }}>
+                      <div>
+                        <strong style={{ color: '#64748b' }}>Relevance:</strong>{' '}
+                        <span style={{ fontWeight: 'bold', color: String(resEval.suggestedRelevance).includes('Bad') ? '#ef4444' : '#10b981' }}>
+                          {resEval.suggestedRelevance}
+                        </span>
+                      </div>
+                      <div>
+                        <strong style={{ color: '#64748b' }}>Name:</strong> <span style={{ fontWeight: '500' }}>{resEval.nameAccuracy}</span>
+                      </div>
+                      <div>
+                        <strong style={{ color: '#64748b' }}>Address:</strong> <span style={{ fontWeight: '500' }}>{resEval.addressAccuracy}</span>
+                      </div>
+                      <div>
+                        <strong style={{ color: '#64748b' }}>Pin:</strong> <span style={{ fontWeight: '500' }}>{resEval.pinAccuracy}</span>
+                      </div>
+                    </div>
+                    
+                    <div style={{ fontSize: '13px', color: '#334155', backgroundColor: '#fff', padding: '10px', borderRadius: '4px', border: '1px dashed #cbd5e1' }}>
+                      <strong>Reasoning:</strong> {resEval.briefExplanation}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
