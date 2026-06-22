@@ -66,6 +66,7 @@ const Dashboard = () => {
   const [tipsData, setTipsData] = useState(''); // New state to store generated tips
   const [manualViewportLatLng, setManualViewportLatLng] = useState(null);
   const [realMapData, setRealMapData] = useState([]);
+  const [viewportDistance, setViewportDistance] = useState(0);
 
   const [detectedLang, setDetectedLang] = useState('');
   const [transError, setTransError] = useState('');
@@ -332,12 +333,13 @@ const Dashboard = () => {
       const response = await fetch('/api/get-rating-tips', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      body: JSON.stringify({
           query: smartLocalizedTask.query,
           taskType: smartLocalizedTask.taskType,
           userLatLng: smartLocalizedTask.userLatLng || smartLocalizedTask.mapCenterLatLng,
           viewportAge: smartLocalizedTask.viewportAge,
-          manualViewportLatLng: manualViewportLatLng, // Send the user's click data
+          manualViewportLatLng: manualViewportLatLng, 
+          viewportDistance: viewportDistance, // NEW: Send the distance to the API
           results: smartLocalizedTask.results
         })
       });
@@ -591,12 +593,13 @@ const Dashboard = () => {
       ) : (
         <div style={{ display: 'flex', height: 'calc(100vh - 45px)' }}>
           <div style={{ width: '45%', borderRight: '2px solid #ccc', position: 'relative' }}>
-           <MapComponent
+         <MapComponent
               userLatLng={activeTask.userLatLng || activeTask.mapCenterLatLng}
               results={activeTask.results}
               resultColors={THEME_COLORS}
               isTipsMode={viewMode === 'tips'}
               manualViewportLatLng={manualViewportLatLng}
+              viewportDistance={viewportDistance} // NEW
               onMapClick={(coords) => setManualViewportLatLng(coords)}
               realData={realMapData}
             />
@@ -722,56 +725,62 @@ const Dashboard = () => {
             {/* --- END OF CONTROL PANEL HEADER --- */}
             {transError && <p style={{ color: '#dc3545', fontWeight: 'bold', padding: '10px', backgroundColor: '#f8d7da', borderRadius: '4px' }}>{transError}</p>}
 
-            {/* --- NEW VIEW: THE RATING TIPS TAB --- */}
-            {/* --- NEW VIEW: THE RATING TIPS TAB --- */}
-            {viewMode === 'tips' && tipsData && (
-              <div style={{ backgroundColor: '#fff', border: '1px solid #f59e0b', borderRadius: '8px', padding: '20px', boxShadow: '0 4px 15px rgba(245, 158, 11, 0.1)' }}>
-                <h3 style={{ marginTop: 0, color: '#b45309', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '2px solid #fde68a', paddingBottom: '10px' }}>
-                  <span>🎯</span> Smart Evaluation Guide
+           {/* --- PRE-TIPS WORKFLOW: Set up the Viewport --- */}
+            {viewMode === 'tips' && !tipsData && (
+              <div style={{ backgroundColor: '#fff', border: '1px solid #10b981', borderRadius: '8px', padding: '24px', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.1)' }}>
+                <h3 style={{ marginTop: 0, color: '#047857', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>🗺️</span> Step 1: Establish Ground Truth
                 </h3>
                 
-                {/* 1. Location Intent Header */}
-                <div style={{ backgroundColor: '#ffffff', padding: '15px', borderRadius: '6px', border: '1px solid #fef08a', marginBottom: '20px' }}>
-                  <h4 style={{ margin: '0 0 8px 0', color: '#92400e', fontSize: '15px' }}>
-                    📍 Location Intent: {tipsData.locationIntentDecision || 'Unknown'}
-                  </h4>
-                  <p style={{ margin: 0, fontSize: '13.5px', color: '#555', lineHeight: '1.5' }}>
-                    {tipsData.locationIntentReason || 'Check user and viewport rules.'}
-                  </p>
+                <p style={{ color: '#475569', fontSize: '14px', lineHeight: '1.6' }}>
+                  To accurately calculate Location Intent and demotions, the AI needs to know the size and center of the Viewport.
+                </p>
+
+                <div style={{ backgroundColor: '#f1f5f9', padding: '16px', borderRadius: '6px', marginBottom: '20px' }}>
+                  <label style={{ display: 'block', fontWeight: 'bold', color: '#334155', marginBottom: '8px', fontSize: '14px' }}>
+                    1. Enter Viewport Distance (in meters)
+                  </label>
+                  <input 
+                    type="number" 
+                    placeholder="e.g., 5000"
+                    value={viewportDistance || ''}
+                    onChange={(e) => setViewportDistance(Number(e.target.value))}
+                    style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                  />
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '6px' }}>Check your task text for "Distance from Viewport". If 5km, enter 5000.</div>
                 </div>
 
-                {/* 2. Individual Result Evaluations */}
-                <h4 style={{ color: '#0f3460', marginBottom: '12px', fontSize: '16px' }}>Result Breakdown</h4>
-                
-                {tipsData.resultEvaluations?.map((resEval, idx) => (
-                  <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '16px', backgroundColor: '#f8fafc' }}>
-                    <h5 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>
-                      Result {resEval.resultNumber}
-                    </h5>
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px', marginBottom: '12px' }}>
-                      <div>
-                        <strong style={{ color: '#64748b' }}>Relevance:</strong>{' '}
-                        <span style={{ fontWeight: 'bold', color: String(resEval.suggestedRelevance).includes('Bad') ? '#ef4444' : '#10b981' }}>
-                          {resEval.suggestedRelevance}
-                        </span>
-                      </div>
-                      <div>
-                        <strong style={{ color: '#64748b' }}>Name:</strong> <span style={{ fontWeight: '500' }}>{resEval.nameAccuracy}</span>
-                      </div>
-                      <div>
-                        <strong style={{ color: '#64748b' }}>Address:</strong> <span style={{ fontWeight: '500' }}>{resEval.addressAccuracy}</span>
-                      </div>
-                      <div>
-                        <strong style={{ color: '#64748b' }}>Pin:</strong> <span style={{ fontWeight: '500' }}>{resEval.pinAccuracy}</span>
-                      </div>
-                    </div>
-                    
-                    <div style={{ fontSize: '13px', color: '#334155', backgroundColor: '#fff', padding: '10px', borderRadius: '4px', border: '1px dashed #cbd5e1' }}>
-                      <strong>Reasoning:</strong> {resEval.briefExplanation}
-                    </div>
+                <div style={{ backgroundColor: '#f1f5f9', padding: '16px', borderRadius: '6px', marginBottom: '24px' }}>
+                  <label style={{ display: 'block', fontWeight: 'bold', color: '#334155', marginBottom: '8px', fontSize: '14px' }}>
+                    2. Set Viewport Center
+                  </label>
+                  <div style={{ fontSize: '14px', color: '#475569' }}>
+                    Click anywhere on the map to drop the green Viewport pin. A shaded box will appear showing the boundaries.
                   </div>
-                ))}
+                  {manualViewportLatLng && (
+                     <div style={{ marginTop: '10px', color: '#10b981', fontWeight: 'bold', fontSize: '13px' }}>
+                       ✓ Viewport Center Set: {manualViewportLatLng}
+                     </div>
+                  )}
+                </div>
+
+                <button 
+                  onClick={handleGetTips} 
+                  disabled={!manualViewportLatLng || isGettingTips} 
+                  style={{ 
+                    width: '100%',
+                    backgroundColor: (!manualViewportLatLng || isGettingTips) ? '#94a3b8' : '#10b981', 
+                    color: 'white', 
+                    border: 'none', 
+                    padding: '12px 16px', 
+                    borderRadius: '6px', 
+                    cursor: (!manualViewportLatLng || isGettingTips) ? 'not-allowed' : 'pointer', 
+                    fontWeight: 'bold',
+                    fontSize: '15px'
+                  }}
+                >
+                  {isGettingTips ? 'Analyzing Rules & Plotting Data...' : 'Step 2: Run AI Evaluation'}
+                </button>
               </div>
             )}
 

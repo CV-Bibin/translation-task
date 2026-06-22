@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Rectangle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -59,6 +59,7 @@ const MapComponent = ({
   resultColors, 
   realData = [], 
   manualViewportLatLng, 
+  viewportDistance, 
   onMapClick, 
   isTipsMode 
 }) => {
@@ -72,8 +73,17 @@ const MapComponent = ({
     return null;
   };
 
-  // Center map on user, or clicked viewport, or default to center of India
+  // Center map on user, or clicked viewport, or default
   const userCenter = parseCoords(userLatLng) || parseCoords(manualViewportLatLng) || [20.5937, 78.9629];
+
+  // Calculate the Viewport Rectangle boundaries
+  const getViewportBounds = () => {
+    if (!manualViewportLatLng || !viewportDistance) return null;
+    const center = parseCoords(manualViewportLatLng);
+    if (!center) return null;
+    // toBounds takes the full width/height in meters. We multiply radius by 2.
+    return L.latLng(center[0], center[1]).toBounds(viewportDistance * 2);
+  };
 
   return (
     <div style={{ height: '100%', width: '100%', zIndex: 0, position: 'relative' }}>
@@ -94,21 +104,26 @@ const MapComponent = ({
         {/* Invisible Click Listener */}
         <MapClickHandler onMapClick={onMapClick} isClickable={isTipsMode} />
 
-        {/* 1. User Pin (Black) - ALWAYS VISIBLE */}
+        {/* --- NEW: The Viewport Rectangle --- */}
+        {isTipsMode && getViewportBounds() && (
+          <Rectangle bounds={getViewportBounds()} pathOptions={{ color: '#28a745', fillOpacity: 0.1, weight: 2 }} />
+        )}
+
+        {/* 1. User Pin (Black) */}
         {parseCoords(userLatLng) && (
           <Marker position={parseCoords(userLatLng)} icon={createColoredPin('#000000')}>
             <Popup><strong>User Location</strong></Popup>
           </Marker>
         )}
 
-        {/* 2. Manual Viewport Pin (Green Target) - ONLY VISIBLE IN TIPS MODE */}
+        {/* 2. Manual Viewport Pin (Green Target) */}
         {isTipsMode && parseCoords(manualViewportLatLng) && (
           <Marker position={parseCoords(manualViewportLatLng)} icon={createViewportPin()}>
             <Popup><strong>Manual Viewport Center</strong></Popup>
           </Marker>
         )}
 
-        {/* 3. Task POI Pins (Colored dynamically) - ALWAYS VISIBLE */}
+        {/* 3. Task POI Pins (Colored dynamically) */}
         {results.map((res, index) => {
           const pinCoords = parseCoords(res.pinLatLng);
           if (pinCoords) {
@@ -121,7 +136,7 @@ const MapComponent = ({
           return null;
         })}
 
-        {/* 4. Ground Truth / Ola Maps Pins (Blue Stars) - ONLY VISIBLE IN TIPS MODE */}
+        {/* 4. Ground Truth / Ola Maps Pins (Blue Stars) */}
         {isTipsMode && realData.map((poi, index) => {
           if (poi.lat && poi.lng) {
             return (
