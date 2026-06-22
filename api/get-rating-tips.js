@@ -1,3 +1,17 @@
+// --- File: api/get-rating-tips.js ---
+
+// Helper: Calculate distance in meters between two coordinates (Haversine formula)
+function getDistanceInMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // Earth radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c);
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -6,79 +20,108 @@ export default async function handler(req, res) {
 
   if (!geminiApiKey) return res.status(500).json({ error: 'Gemini API key missing' });
 
-  // Notice we added viewportAge and manualViewportLatLng here
-  const { query, taskType, userLatLng, viewportAge, manualViewportLatLng, results } = req.body;
-
-  const fetchNearbyOlaPOIs = async (lat, lng, searchString) => {
-    if (!olaMapsApiKey) return [];
-    const olaUrl = `https://api.olamaps.io/places/v1/nearbysearch?location=${lat},${lng}&radius=10000&keyword=${encodeURIComponent(searchString)}&api_key=${olaMapsApiKey}`;
-    try {
-      const response = await fetch(olaUrl);
-      const data = await response.json();
-      return (data.predictions || []).slice(0, 5).map(place => ({
-        name: place.structured_formatting?.main_text || place.description || 'Unknown',
-        address: place.structured_formatting?.secondary_text || 'Address not listed',
-        lat: place.geometry?.location?.lat,
-        lng: place.geometry?.location?.lng
-      }));
-    } catch (e) {
-      console.error('Ola Maps Error:', e);
-      return [];
-    }
-  };
+  const { query, taskType, userLatLng, viewportAge, manualViewportLatLng, viewportDistance, results } = req.body;
 
   try {
+    // ==========================================
+    // STEP 1: HARDCODED LOCATION INTENT LOGIC
+    // ==========================================
+    let intentCenter = userLatLng; 
+    let intentDecision = "User Location";
+    let intentReason = "Defaulted to user location.";
+
+    const hasUser = userLatLng && userLatLng.includes(',');
+    const hasViewport = manualViewportLatLng && manualViewportLatLng.includes(',');
+
+    if (!hasUser && hasViewport) {
+      intentCenter = manualViewportLatLng;
+      intentDecision = "Viewport Center";
+      intentReason = "User location is missing, falling back to Viewport.";
+    } else if (hasUser && hasViewport && viewportDistance) {
+      const [uLat, uLng] = userLatLng.split(',').map(Number);
+      const [vLat, vLng] = manualViewportLatLng.split(',').map(Number);
+      
+      const distToViewport = getDistanceInMeters(uLat, uLng, vLat, vLng);
+      const isInside = distToViewport <= Number(viewportDistance);
+      const isFresh = !viewportAge || viewportAge.toLowerCase() !== 'stale';
+
+      if (isFresh && isInside) {
+        intentCenter = userLatLng;
+        intentDecision = "User Location";
+        intentReason = `Viewport is fresh and user is INSIDE (${distToViewport}m < ${viewportDistance}m radius).`;
+      } else if (isFresh && !isInside) {
+        intentCenter = manualViewportLatLng;
+        intentDecision = "Viewport Center";
+        intentReason = `Viewport is fresh but user is OUTSIDE (${distToViewport}m > ${viewportDistance}m radius).`;
+      } else if (!isFresh) {
+        intentCenter = userLatLng;
+        intentDecision = "User Location";
+        intentReason = "Viewport is Stale. Automatically defaulting to User Location.";
+      }
+    } else if (hasUser && !hasViewport) {
+      intentReason = "No Viewport provided by user. Using User Location.";
+    }
+
+    // ==========================================
+    // STEP 2: OLA MAPS GROUND TRUTH SEARCH
+    // ==========================================
     let realNearbyLocations = [];
     const searchKeyword = query ? query.split(' ')[0].replace(/[^a-zA-Z0-9]/g, '') : '';
     
-    // Default to user location for the Ola search, or manual viewport if user is missing
-    const searchCenter = userLatLng || manualViewportLatLng;
-
-    if (searchCenter && searchCenter.includes(',') && searchKeyword.length > 2) {
-      const [lat, lng] = searchCenter.split(',').map(c => c.trim());
-      realNearbyLocations = await fetchNearbyOlaPOIs(lat, lng, searchKeyword);
+    if (intentCenter && intentCenter.includes(',') && searchKeyword.length > 2 && olaMapsApiKey) {
+      const [lat, lng] = intentCenter.split(',').map(c => c.trim());
+      const olaUrl = `https://api.olamaps.io/places/v1/nearbysearch?location=${lat},${lng}&radius=10000&keyword=${encodeURIComponent(searchKeyword)}&api_key=${olaMapsApiKey}`;
+      
+      try {
+        const olaRes = await fetch(olaUrl);
+        const olaData = await olaRes.json();
+        realNearbyLocations = (olaData.predictions || []).slice(0, 5).map(place => ({
+          name: place.structured_formatting?.main_text || place.description || 'Unknown',
+          address: place.structured_formatting?.secondary_text || 'Address not listed',
+          lat: place.geometry?.location?.lat,
+          lng: place.geometry?.location?.lng
+        }));
+      } catch (e) {
+        console.error('Ola Maps Error:', e);
+      }
     }
 
+    // ==========================================
+    // STEP 3: THE 5-STEP GEMINI AI PIPELINE
+    // ==========================================
     const prompt = `
-      You are an expert Map Quality Evaluator. Analyze the task and return a strict JSON evaluation.
+      You are an expert Map Quality Evaluator. You must follow the 5-Step SOP strictly.
       
       Task Context:
+      - Task Type: "${taskType}" (If Autocomplete: focus on character prediction. If Search 2.0: focus on destination relevance).
       - Query: "${query}"
-      - Task Type: "${taskType}"
-      - User Location: "${userLatLng || 'MISSING'}"
-      - Viewport Age: "${viewportAge || 'FRESH'}"
-      - Manual Viewport Center: "${manualViewportLatLng || 'MISSING'}"
-      - Ground-Truth Found Nearby (Ola Maps): ${JSON.stringify(realNearbyLocations)}
+      - The system has already calculated the Location Intent: ${intentDecision}.
+      - Ground-Truth Found Near Intent (Ola Maps): ${JSON.stringify(realNearbyLocations)}
       
-      STEP 1: Determine Location Intent based on these STRICT rules:
-      1. If Viewport is FRESH (or missing age) AND User is INSIDE viewport (assume inside if distances are close) -> Intent = USER.
-      2. If Viewport is FRESH AND User is OUTSIDE -> Intent = VIEWPORT.
-      3. If Viewport is STALE -> Intent = USER (whether inside or outside).
-      4. If User Location is MISSING -> Intent = VIEWPORT.
-      5. Query contains ( near me , nearby , nearest)-> Intent = USER (whether inside or outside).
+      Evaluate the following results according to the SOP:
+      ${JSON.stringify(results)}
 
-      STEP 2: Evaluate Results:
-      Current Task Results: ${JSON.stringify(results)}
-
-      For EACH result, provide:
-      - suggestedRelevance: (Excellent, Good, Acceptable, Bad) based on distance from Intent and brand match.
-      - nameAccuracy: Is it a perfect match, sub-brand, or incorrect?
-      - addressAccuracy: Does it match the assumed ground truth?
-      - pinAccuracy: Note if distance to Intent seems suspicious.
-      - briefExplanation: 1-2 sentences explaining the ratings.
-
-      OUTPUT FORMAT: YOU MUST RETURN ONLY VALID JSON. NO MARKDOWN. NO CODE BLOCKS.
+      OUTPUT FORMAT: YOU MUST RETURN ONLY VALID JSON MATCHING THIS EXACT STRUCTURE.
       {
-        "locationIntentDecision": "User Location | Viewport Center",
-        "locationIntentReason": "Explanation of which rule was applied.",
+        "locationIntentDecision": "${intentDecision}",
+        "locationIntentReason": "${intentReason}",
+        "step1_UserIntent": {
+          "queryType": "(Address, POI, Category, etc.)",
+          "intentExplanation": "Brief explanation of what the user actually wants based on the query."
+        },
+        "step2_NavigationalQuestion": {
+          "isUniqueDestination": "Yes / No",
+          "reasoning": "Explanation"
+        },
         "resultEvaluations": [
           {
-            "resultNumber": "1.",
-            "suggestedRelevance": "Good",
-            "nameAccuracy": "Correct",
-            "addressAccuracy": "Needs Verification",
-            "pinAccuracy": "Likely Correct",
-            "briefExplanation": "Matches brand name, but distance from user intent suggests a slight demotion."
+            "resultNumber": 1,
+            "step3_LanguageIssue": "Yes / No",
+            "step4_BusinessStatus": "Open / Closed / Does Not Exist",
+            "step5_AddressAccuracy": "Correct / Incorrect",
+            "step5_PinAccuracy": "Correct / Incorrect",
+            "suggestedRelevance": "Excellent / Good / Acceptable / Bad",
+            "briefExplanation": "1-2 sentences summarizing the demotions and relevance score."
           }
         ]
       }
