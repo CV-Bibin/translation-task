@@ -605,8 +605,9 @@ const Dashboard = () => {
             />
           </div>
 
-          <div style={{ width: '55%', backgroundColor: 'white', overflowY: 'auto', padding: '20px' }}>
-            {/* --- NEW SEPARATED CONTROL PANEL HEADER --- */}
+  <div style={{ width: '55%', backgroundColor: 'white', overflowY: 'auto', padding: '20px' }}>
+            
+            {/* --- SEPARATED CONTROL PANEL HEADER --- */}
             <div style={{
               backgroundColor: '#f8fbff',
               padding: '16px 20px',
@@ -615,11 +616,7 @@ const Dashboard = () => {
               border: `1px solid ${APP_THEME.panelBorder}`,
               boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)',
             }}>
-
-              {/* TOP ROW: Action Buttons */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-
-                {/* Left Side: Translation/Localization Tools */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                   {isCached && <span style={{ fontSize: '13px', color: '#198754', fontWeight: 'bold', marginRight: '5px', backgroundColor: '#d1e7dd', padding: '4px 8px', borderRadius: '4px' }}>DB Archive</span>}
 
@@ -638,83 +635,40 @@ const Dashboard = () => {
                   </button>
                 </div>
 
-                {/* Right Side: Meta Tools (Tips & Lang Detection) */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   {detectedLang && (
                     <span style={{ fontSize: '13px', color: '#084298', fontWeight: 'bold' }}>
                       Detected: {getLanguageLabel(detectedLang)}
                     </span>
                   )}
-
-                  {smartLocalizedTask && (
-                    <button
-                      onClick={handleGetTips}
-                      disabled={isGettingTips}
-                      style={{
-                        backgroundColor: '#f59e0b',
-                        color: '#111827',
-                        border: 'none',
-                        padding: '8px 16px',
-                        borderRadius: '6px',
-                        cursor: isGettingTips ? 'not-allowed' : 'pointer',
-                        fontWeight: 'bold',
-                        boxShadow: '0 2px 6px rgba(245, 158, 11, 0.2)'
-                      }}
-                    >
-                      {isGettingTips ? 'Analyzing Rules...' : 'Get Rating Tips'}
-                    </button>
-                  )}
                 </div>
               </div>
 
-              {/* BOTTOM ROW: Tabs */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
-
-                {/* Left Side: Data View Tabs */}
                 <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #ccc', overflow: 'hidden' }}>
                   <button onClick={() => setViewMode('original')} style={{ padding: '6px 14px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: viewMode === 'original' ? '#0f3460' : 'transparent', color: viewMode === 'original' ? 'white' : '#555' }}>
                     Raw Data
                   </button>
-
                   <button onClick={() => setViewMode('translated')} disabled={!translatedTask} style={{ padding: '6px 14px', border: 'none', cursor: translatedTask ? 'pointer' : 'not-allowed', fontWeight: 'bold', backgroundColor: viewMode === 'translated' && translatedTask ? '#0f3460' : 'transparent', color: viewMode === 'translated' && translatedTask ? 'white' : '#aaa' }}>
                     Translated
                   </button>
-
                   <button onClick={() => setViewMode('smartLocalized')} disabled={!smartLocalizedTask} style={{ padding: '6px 14px', border: 'none', cursor: smartLocalizedTask ? 'pointer' : 'not-allowed', fontWeight: 'bold', backgroundColor: viewMode === 'smartLocalized' && smartLocalizedTask ? '#0f3460' : 'transparent', color: viewMode === 'smartLocalized' && smartLocalizedTask ? 'white' : '#aaa' }}>
                     Smart English
                   </button>
-
                   <button
                     onClick={() => setViewMode('compare')}
                     disabled={!smartLocalizedTask}
-                    style={{
-                      padding: '6px 14px',
-                      border: 'none',
-                      cursor: smartLocalizedTask ? 'pointer' : 'not-allowed',
-                      fontWeight: 'bold',
-                      backgroundColor: viewMode === 'compare' && smartLocalizedTask ? '#0f766e' : 'transparent',
-                      color: viewMode === 'compare' && smartLocalizedTask ? 'white' : smartLocalizedTask ? '#0f766e' : '#aaa',
-                      borderLeft: '1px solid #bae6fd',
-                    }}
+                    style={{ padding: '6px 14px', border: 'none', cursor: smartLocalizedTask ? 'pointer' : 'not-allowed', fontWeight: 'bold', backgroundColor: viewMode === 'compare' && smartLocalizedTask ? '#0f766e' : 'transparent', color: viewMode === 'compare' && smartLocalizedTask ? 'white' : smartLocalizedTask ? '#0f766e' : '#aaa', borderLeft: '1px solid #bae6fd' }}
                   >
                     Compare
                   </button>
                 </div>
 
-                {/* Right Side: Rating Guide Tab */}
-                {tipsData && (
+                {smartLocalizedTask && (
                   <div style={{ display: 'flex', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #fcd34d', overflow: 'hidden', boxShadow: '0 2px 4px rgba(245, 158, 11, 0.1)' }}>
                     <button
                       onClick={() => setViewMode('tips')}
-                      disabled={!tipsData}
-                      style={{
-                        padding: '6px 16px',
-                        border: 'none',
-                        cursor: tipsData ? 'pointer' : 'not-allowed',
-                        fontWeight: 'bold',
-                        backgroundColor: viewMode === 'tips' && tipsData ? '#b45309' : '#fef3c7',
-                        color: viewMode === 'tips' && tipsData ? 'white' : '#b45309',
-                      }}
+                      style={{ padding: '6px 16px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: viewMode === 'tips' ? '#b45309' : '#fef3c7', color: viewMode === 'tips' ? 'white' : '#b45309' }}
                     >
                       ★ Rating Guide
                     </button>
@@ -722,16 +676,15 @@ const Dashboard = () => {
                 )}
               </div>
             </div>
-            {/* --- END OF CONTROL PANEL HEADER --- */}
+
             {transError && <p style={{ color: '#dc3545', fontWeight: 'bold', padding: '10px', backgroundColor: '#f8d7da', borderRadius: '4px' }}>{transError}</p>}
 
-           {/* --- PRE-TIPS WORKFLOW: Set up the Viewport --- */}
-            {viewMode === 'tips' && !tipsData && (
+            {/* --- PRE-TIPS WORKFLOW: Set up the Viewport --- */}
+            {viewMode === 'tips' && (!tipsData || Object.keys(tipsData).length === 0) && (
               <div style={{ backgroundColor: '#fff', border: '1px solid #10b981', borderRadius: '8px', padding: '24px', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.1)' }}>
                 <h3 style={{ marginTop: 0, color: '#047857', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>🗺️</span> Step 1: Establish Ground Truth
                 </h3>
-                
                 <p style={{ color: '#475569', fontSize: '14px', lineHeight: '1.6' }}>
                   To accurately calculate Location Intent and demotions, the AI needs to know the size and center of the Viewport.
                 </p>
@@ -767,119 +720,116 @@ const Dashboard = () => {
                 <button 
                   onClick={handleGetTips} 
                   disabled={!manualViewportLatLng || isGettingTips} 
-                  style={{ 
-                    width: '100%',
-                    backgroundColor: (!manualViewportLatLng || isGettingTips) ? '#94a3b8' : '#10b981', 
-                    color: 'white', 
-                    border: 'none', 
-                    padding: '12px 16px', 
-                    borderRadius: '6px', 
-                    cursor: (!manualViewportLatLng || isGettingTips) ? 'not-allowed' : 'pointer', 
-                    fontWeight: 'bold',
-                    fontSize: '15px'
-                  }}
+                  style={{ width: '100%', backgroundColor: (!manualViewportLatLng || isGettingTips) ? '#94a3b8' : '#10b981', color: 'white', border: 'none', padding: '12px 16px', borderRadius: '6px', cursor: (!manualViewportLatLng || isGettingTips) ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '15px' }}
                 >
                   {isGettingTips ? 'Analyzing Rules & Plotting Data...' : 'Step 2: Run AI Evaluation'}
                 </button>
               </div>
             )}
 
-            {/* Existing Warning Message UI */}
-            {viewMode === 'smartLocalized' && spellingIssues.length > 0 && (
-              <div style={{ backgroundColor: '#fff3cd', border: '1px solid #ffecb5', color: '#664d03', padding: '10px 12px', borderRadius: '6px', marginBottom: '15px', fontSize: '13px' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-                  {spellingIssues.length} possible spelling {spellingIssues.length === 1 ? 'issue' : 'issues'} found
+            {/* --- NEW VIEW: THE RATING TIPS JSON RESULTS --- */}
+            {viewMode === 'tips' && tipsData && Object.keys(tipsData).length > 0 && (
+              <div style={{ backgroundColor: '#fff', border: '1px solid #f59e0b', borderRadius: '8px', padding: '20px', boxShadow: '0 4px 15px rgba(245, 158, 11, 0.1)' }}>
+                <h3 style={{ marginTop: 0, color: '#b45309', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '2px solid #fde68a', paddingBottom: '10px' }}>
+                  <span>🎯</span> Smart Evaluation Guide
+                </h3>
+                
+                <div style={{ backgroundColor: '#fdfcbc', padding: '15px', borderRadius: '6px', border: '1px solid #fef08a', marginBottom: '20px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#92400e', fontSize: '15px' }}>
+                    📍 Location Intent: {tipsData.locationIntentDecision || 'Unknown'}
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '13.5px', color: '#555', lineHeight: '1.5' }}>
+                    {tipsData.locationIntentReason || 'Check user and viewport rules.'}
+                  </p>
                 </div>
 
-                <ul style={{ margin: '0 0 0 18px', padding: 0 }}>
-                  {spellingIssues.map((issue, index) => (
-                    <li key={`${issue.inputIndex}-${index}`} style={{ marginBottom: '5px' }}>
-                      <strong>{issue.fieldType || 'field'}</strong> #{issue.inputIndex}:{' '}
-                      <span>{issue.originalWord || '-'}</span> {' -> '}
-                      <span>{issue.suggestedWord || '-'}</span>
-                      {issue.severity ? ` [${issue.severity}]` : ''}
-                      {issue.reason ? ` - ${issue.reason}` : ''}
-                    </li>
-                  ))}
-                </ul>
+                <h4 style={{ color: '#0f3460', marginBottom: '12px', fontSize: '16px' }}>Result Breakdown</h4>
+                
+                {tipsData.resultEvaluations?.map((resEval, idx) => (
+                  <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '16px', backgroundColor: '#f8fafc' }}>
+                    <h5 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>
+                      Result {resEval.resultNumber}
+                    </h5>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px', marginBottom: '12px' }}>
+                      <div><strong style={{ color: '#64748b' }}>Relevance:</strong> <span style={{ fontWeight: 'bold', color: String(resEval.suggestedRelevance).includes('Bad') ? '#ef4444' : '#10b981' }}>{resEval.suggestedRelevance}</span></div>
+                      <div><strong style={{ color: '#64748b' }}>Name:</strong> <span style={{ fontWeight: '500' }}>{resEval.nameAccuracy}</span></div>
+                      <div><strong style={{ color: '#64748b' }}>Address:</strong> <span style={{ fontWeight: '500' }}>{resEval.addressAccuracy}</span></div>
+                      <div><strong style={{ color: '#64748b' }}>Pin:</strong> <span style={{ fontWeight: '500' }}>{resEval.pinAccuracy}</span></div>
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#334155', backgroundColor: '#fff', padding: '10px', borderRadius: '4px', border: '1px dashed #cbd5e1' }}>
+                      <strong>Reasoning:</strong> {resEval.briefExplanation}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
-            {/* Existing Task Metadata UI */}
+            {/* --- EXISTING VIEWS (Raw, Translated, Smart Localized) --- */}
             {viewMode !== 'tips' && (
-              <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #e9ecef', fontSize: '13px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ddd', paddingBottom: '10px', marginBottom: '10px' }}>
-                  <div><strong>Task Type:</strong> {activeTask.taskType}</div>
-                  <div><strong>Request ID:</strong> {activeTask.requestId}</div>
-                  <div><strong>Time:</strong> {activeTask.estimatedTime}</div>
-                </div>
-
-                <div style={{ margin: '6px 0' }}>
-                  <strong>Query:</strong>{' '}
-                  <span style={{ color: '#0f3460', fontWeight: 'bold', fontSize: '15px' }}>{activeTask.query}</span>
-
-                  {viewMode === 'smartLocalized' && querySpellingIssue && (
-                    <div style={{ marginTop: '8px', backgroundColor: '#fff3cd', border: '1px solid #ffecb5', color: '#664d03', padding: '8px', borderRadius: '6px', fontSize: '12px' }}>
-                      <strong>Possible query spelling issue:</strong>{' '}
-                      {querySpellingIssue.originalWord || '-'} {' -> '} {querySpellingIssue.suggestedWord || '-'}
-                      {querySpellingIssue.reason ? ` (${querySpellingIssue.reason})` : ''}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Existing Compare UI */}
-            {viewMode === 'compare' && originalTask && smartLocalizedTask ? (
               <>
-                <div style={{ backgroundColor: '#f2ec97', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #e9ecef' }}>
-                  <CompareField label="Query" originalValue={originalTask.query} smartValue={smartLocalizedTask.query} inputIndex={0} />
+                {viewMode === 'smartLocalized' && spellingIssues.length > 0 && (
+                  <div style={{ backgroundColor: '#fff3cd', border: '1px solid #ffecb5', color: '#664d03', padding: '10px 12px', borderRadius: '6px', marginBottom: '15px', fontSize: '13px' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+                      {spellingIssues.length} possible spelling {spellingIssues.length === 1 ? 'issue' : 'issues'} found
+                    </div>
+                    <ul style={{ margin: '0 0 0 18px', padding: 0 }}>
+                      {spellingIssues.map((issue, index) => (
+                        <li key={`${issue.inputIndex}-${index}`} style={{ marginBottom: '5px' }}>
+                          <strong>{issue.fieldType || 'field'}</strong> #{issue.inputIndex}: <span>{issue.originalWord || '-'}</span> {' -> '} <span>{issue.suggestedWord || '-'}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #e9ecef', fontSize: '13px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ddd', paddingBottom: '10px', marginBottom: '10px' }}>
+                    <div><strong>Task Type:</strong> {activeTask.taskType}</div>
+                    <div><strong>Request ID:</strong> {activeTask.requestId}</div>
+                    <div><strong>Time:</strong> {activeTask.estimatedTime}</div>
+                  </div>
+                  <div style={{ margin: '6px 0' }}>
+                    <strong>Query:</strong> <span style={{ color: '#0f3460', fontWeight: 'bold', fontSize: '15px' }}>{activeTask.query}</span>
+                  </div>
                 </div>
 
-                {smartLocalizedTask.results.map((smartResult, idx) => {
-                  const originalResult = originalTask.results[idx] || {};
-                  const baseIndex = 1 + idx * 5;
-
-                  return (
-                    <div key={idx} style={{ border: '1px solid #ced4da', borderRadius: '6px', marginBottom: '25px', overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
-                      <div style={{ backgroundColor: THEME_COLORS[idx % THEME_COLORS.length], color: 'white', padding: '10px 15px', fontWeight: 'bold', fontSize: '15px' }}>
-                        {smartResult.number} {smartResult.title}
-                      </div>
-
-                      <div style={{ padding: '15px', fontSize: '13px' }}>
-                        <CompareField label="Title" originalValue={originalResult.title} smartValue={smartResult.title} inputIndex={baseIndex} />
-                        <CompareField label="Address" originalValue={originalResult.address} smartValue={smartResult.address} inputIndex={baseIndex + 1} />
-                        <CompareField label="Category" originalValue={originalResult.category} smartValue={smartResult.category} inputIndex={baseIndex + 2} />
-                        <CompareField label="Type" originalValue={originalResult.type} smartValue={smartResult.type} inputIndex={baseIndex + 3} />
-                        <CompareField label="Status" originalValue={originalResult.status} smartValue={smartResult.status} inputIndex={baseIndex + 4} />
-                      </div>
+                {viewMode === 'compare' && originalTask && smartLocalizedTask ? (
+                  <>
+                    <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #e9ecef' }}>
+                      <CompareField label="Query" originalValue={originalTask.query} smartValue={smartLocalizedTask.query} inputIndex={0} />
                     </div>
-                  );
-                })}
+                    {smartLocalizedTask.results.map((smartResult, idx) => {
+                      const originalResult = originalTask.results[idx] || {};
+                      const baseIndex = 1 + idx * 5;
+                      return (
+                        <div key={idx} style={{ border: '1px solid #ced4da', borderRadius: '6px', marginBottom: '25px', overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+                          <div style={{ backgroundColor: THEME_COLORS[idx % THEME_COLORS.length], color: 'white', padding: '10px 15px', fontWeight: 'bold', fontSize: '15px' }}>
+                            {smartResult.number} {smartResult.title}
+                          </div>
+                          <div style={{ padding: '15px', fontSize: '13px' }}>
+                            <CompareField label="Title" originalValue={originalResult.title} smartValue={smartResult.title} inputIndex={baseIndex} />
+                            <CompareField label="Address" originalValue={originalResult.address} smartValue={smartResult.address} inputIndex={baseIndex + 1} />
+                            <CompareField label="Category" originalValue={originalResult.category} smartValue={smartResult.category} inputIndex={baseIndex + 2} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                ) : (
+                  activeTask.results.map((result, idx) => {
+                    const baseIndex = 1 + idx * 5;
+                    const issuesForResult = {
+                      title: spellingIssues.find((issue) => issue.inputIndex === baseIndex),
+                      address: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 1),
+                      category: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 2),
+                    };
+                    return (
+                      <ResultCard key={idx} result={result} color={THEME_COLORS[idx % THEME_COLORS.length]} spellingIssues={viewMode === 'smartLocalized' ? issuesForResult : {}} />
+                    );
+                  })
+                )}
               </>
-            ) : viewMode !== 'tips' ? (
-              /* Existing Standard UI */
-              activeTask.results.map((result, idx) => {
-                const baseIndex = 1 + idx * 5;
-
-                const issuesForResult = {
-                  title: spellingIssues.find((issue) => issue.inputIndex === baseIndex),
-                  address: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 1),
-                  category: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 2),
-                  type: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 3),
-                  status: spellingIssues.find((issue) => issue.inputIndex === baseIndex + 4),
-                };
-
-                return (
-                  <ResultCard
-                    key={idx}
-                    result={result}
-                    color={THEME_COLORS[idx % THEME_COLORS.length]}
-                    spellingIssues={viewMode === 'smartLocalized' ? issuesForResult : {}}
-                  />
-                );
-              })
-            ) : null}
+            )}
           </div>
         </div>
       )}
