@@ -96,19 +96,6 @@ export const parseRawTaskText = (text) => {
     }
   }
 
-  let topAutocompleteAddress = '';
-
-  if (normalize(taskData.taskType) === 'autocomplete') {
-    for (const line of lines) {
-      const inlineAddress = getInlineValue(line, 'Address');
-
-      if (inlineAddress) {
-        topAutocompleteAddress = inlineAddress;
-        break;
-      }
-    }
-  }
-
   const getNextResultValue = (index) => {
     const nextLine = lines[index + 1];
 
@@ -123,6 +110,109 @@ export const parseRawTaskText = (text) => {
 
     return '';
   };
+
+  // =========================================================================
+  // BRANCH 1: AUTOCOMPLETE TASKS (Handles new label-less multiline addresses)
+  // =========================================================================
+  if (normalize(taskData.taskType) === 'autocomplete') {
+    let currentResult = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      if (isResultNumber(line)) {
+        if (currentResult) taskData.results.push(currentResult);
+
+        currentResult = {
+          number: line,
+          title: '',
+          address: '',
+          category: '',
+          type: '',
+          status: '',
+          distanceToUser: '',
+          distanceToViewport: '',
+          pinLatLng: '',
+        };
+
+        // Extract Title and dynamic multiline Address
+        if (
+          i + 1 < lines.length &&
+          !isResultLabel(lines[i + 1]) &&
+          !isResultNumber(lines[i + 1])
+        ) {
+          currentResult.title = lines[i + 1];
+          i++; // Move past title
+
+          const addressParts = [];
+          while (
+            i + 1 < lines.length &&
+            !isResultLabel(lines[i + 1]) &&
+            !isResultNumber(lines[i + 1]) &&
+            lines[i + 1] !== 'Result name/title is in unexpected language or script'
+          ) {
+            addressParts.push(lines[i + 1]);
+            i++; // Consume address line
+          }
+
+          if (addressParts.length > 0) {
+            currentResult.address = addressParts.join(', ');
+          }
+        }
+      } else if (currentResult) {
+        const nLine = normalize(line);
+
+        // Allow explicit override if old formatting WITH an 'Address' label appears
+        const inlineAddress = getInlineValue(line, 'Address');
+        if (nLine === 'address' || inlineAddress) {
+          if (inlineAddress) {
+            currentResult.address = inlineAddress;
+          } else {
+            let addrLines = [];
+            let j = i + 1;
+            while (
+              j < lines.length &&
+              !isResultLabel(lines[j]) &&
+              !isResultNumber(lines[j]) &&
+              lines[j] !== 'Result name/title is in unexpected language or script'
+            ) {
+              addrLines.push(lines[j]);
+              j++;
+            }
+            currentResult.address = addrLines.join(', ');
+          }
+        }
+
+        // Check for normal explicit labels
+        if (nLine === 'category') currentResult.category = getNextResultValue(i);
+        if (nLine === 'type') currentResult.type = getNextResultValue(i);
+        if (nLine === 'status') currentResult.status = getNextResultValue(i);
+        if (nLine === 'distance to user') currentResult.distanceToUser = getNextResultValue(i);
+        if (nLine === 'distance to viewport') currentResult.distanceToViewport = getNextResultValue(i);
+        if (nLine === 'lat, lng') currentResult.pinLatLng = getNextResultValue(i);
+      }
+    }
+
+    if (currentResult) taskData.results.push(currentResult);
+    return taskData;
+  }
+
+
+  // =========================================================================
+  // BRANCH 2: ALL OTHER TASKS (Your exact original logic)
+  // =========================================================================
+  let topAutocompleteAddress = '';
+
+  if (normalize(taskData.taskType) === 'autocomplete') {
+    for (const line of lines) {
+      const inlineAddress = getInlineValue(line, 'Address');
+
+      if (inlineAddress) {
+        topAutocompleteAddress = inlineAddress;
+        break;
+      }
+    }
+  }
 
   let currentResult = null;
 
