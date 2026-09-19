@@ -29,45 +29,26 @@ export const parseRawTaskText = (text) => {
 
   const getInlineValue = (line, label) => {
     const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
     const match = String(line || '').match(
       new RegExp(`^${escapedLabel}(?:\\t|\\s*:\\s*|\\s{2,})(.+)$`, 'i')
     );
-
     return match ? match[1].trim() : '';
   };
 
   const resultLabels = [
-    'Address',
-    'Category',
-    'Type',
-    'Status',
-    'Distance to User',
-    'Distance to Viewport',
-    'Lat, Lng',
-    'Result name/title is in unexpected language or script',
-    'Business/POI is closed or does not exist',
-    'Relevance',
-    'Name Accuracy',
-    'Name and Category Accuracy',
-    'Address Accuracy',
-    'Pin Accuracy',
-    'Comment and Link',
-    'Submit Ratings',
-    'Ratings',
+    'Address', 'Category', 'Type', 'Status', 'Distance to User', 'Distance to Viewport',
+    'Lat, Lng', 'Result name/title is in unexpected language or script',
+    'Business/POI is closed or does not exist', 'Relevance', 'Name Accuracy',
+    'Name and Category Accuracy', 'Address Accuracy', 'Pin Accuracy',
+    'Comment and Link', 'Submit Ratings', 'Ratings'
   ];
 
-  const isResultLabel = (line) =>
-    resultLabels.some((label) => normalize(label) === normalize(line));
-
+  const isResultLabel = (line) => resultLabels.some((label) => normalize(label) === normalize(line));
   const isResultNumber = (line) => /^\d+\.$/.test(line);
+  const isCoordinates = (line) => /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(line);
+  const isViewportLine = (line) => /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*:\s*\d+/.test(line);
 
-  const isCoordinates = (line) =>
-    /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(line);
-
-  const isViewportLine = (line) =>
-    /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*:\s*\d+/.test(line);
-
+  // 1. Extract Global Variables
   taskData.taskFormat = lines[0] || '';
   taskData.taskType = findGlobalValue('Task Type');
   taskData.requestId = findGlobalValue('Request ID');
@@ -78,135 +59,25 @@ export const parseRawTaskText = (text) => {
   taskData.country = findGlobalValue('Country');
   taskData.userLatLng = findGlobalValue('User Lat, Lng');
 
-  const topLatLngIdx = lines.findIndex((line) => normalize(line) === 'lat, lng');
+  // 2. Map Center Logic
+  const headerLines = lines.slice(0, 20);
+  const viewportLine = headerLines.find(isViewportLine);
+  const coordLine = headerLines.find(isCoordinates);
 
-  if (topLatLngIdx !== -1) {
-    const nextLine = lines[topLatLngIdx + 1];
-
-    if (isCoordinates(nextLine)) {
-      taskData.mapCenterLatLng = nextLine;
-    } else {
-      const viewportLine = lines
-        .slice(topLatLngIdx, topLatLngIdx + 8)
-        .find(isViewportLine);
-
-      if (viewportLine) {
-        taskData.mapCenterLatLng = viewportLine.split(':')[0].trim();
-      }
-    }
+  if (viewportLine) {
+    taskData.mapCenterLatLng = viewportLine.split(':')[0].trim();
+  } else if (coordLine) {
+    taskData.mapCenterLatLng = coordLine;
   }
 
-  const getNextResultValue = (index) => {
-    const nextLine = lines[index + 1];
-
-    if (
-      nextLine &&
-      !isResultLabel(nextLine) &&
-      !isResultNumber(nextLine) &&
-      nextLine !== 'Result name/title is in unexpected language or script'
-    ) {
-      return nextLine;
-    }
-
-    return '';
-  };
-
-  // =========================================================================
-  // BRANCH 1: AUTOCOMPLETE TASKS (Handles new label-less multiline addresses)
-  // =========================================================================
-  if (normalize(taskData.taskType) === 'autocomplete') {
-    let currentResult = null;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-
-      if (isResultNumber(line)) {
-        if (currentResult) taskData.results.push(currentResult);
-
-        currentResult = {
-          number: line,
-          title: '',
-          address: '',
-          category: '',
-          type: '',
-          status: '',
-          distanceToUser: '',
-          distanceToViewport: '',
-          pinLatLng: '',
-        };
-
-        // Extract Title and dynamic multiline Address
-        if (
-          i + 1 < lines.length &&
-          !isResultLabel(lines[i + 1]) &&
-          !isResultNumber(lines[i + 1])
-        ) {
-          currentResult.title = lines[i + 1];
-          i++; // Move past title
-
-          const addressParts = [];
-          while (
-            i + 1 < lines.length &&
-            !isResultLabel(lines[i + 1]) &&
-            !isResultNumber(lines[i + 1]) &&
-            lines[i + 1] !== 'Result name/title is in unexpected language or script'
-          ) {
-            addressParts.push(lines[i + 1]);
-            i++; // Consume address line
-          }
-
-          if (addressParts.length > 0) {
-            currentResult.address = addressParts.join(', ');
-          }
-        }
-      } else if (currentResult) {
-        const nLine = normalize(line);
-
-        // Allow explicit override if old formatting WITH an 'Address' label appears
-        const inlineAddress = getInlineValue(line, 'Address');
-        if (nLine === 'address' || inlineAddress) {
-          if (inlineAddress) {
-            currentResult.address = inlineAddress;
-          } else {
-            let addrLines = [];
-            let j = i + 1;
-            while (
-              j < lines.length &&
-              !isResultLabel(lines[j]) &&
-              !isResultNumber(lines[j]) &&
-              lines[j] !== 'Result name/title is in unexpected language or script'
-            ) {
-              addrLines.push(lines[j]);
-              j++;
-            }
-            currentResult.address = addrLines.join(', ');
-          }
-        }
-
-        // Check for normal explicit labels
-        if (nLine === 'category') currentResult.category = getNextResultValue(i);
-        if (nLine === 'type') currentResult.type = getNextResultValue(i);
-        if (nLine === 'status') currentResult.status = getNextResultValue(i);
-        if (nLine === 'distance to user') currentResult.distanceToUser = getNextResultValue(i);
-        if (nLine === 'distance to viewport') currentResult.distanceToViewport = getNextResultValue(i);
-        if (nLine === 'lat, lng') currentResult.pinLatLng = getNextResultValue(i);
-      }
-    }
-
-    if (currentResult) taskData.results.push(currentResult);
-    return taskData;
-  }
-
-
-  // =========================================================================
-  // BRANCH 2: ALL OTHER TASKS (Your exact original logic)
-  // =========================================================================
+  // 3. Extract Top Autocomplete Address
   let topAutocompleteAddress = '';
-
-  if (normalize(taskData.taskType) === 'autocomplete') {
+  if (
+    normalize(taskData.taskType) === 'autocomplete' &&
+    normalize(taskData.country) === 'india'
+  ) {
     for (const line of lines) {
       const inlineAddress = getInlineValue(line, 'Address');
-
       if (inlineAddress) {
         topAutocompleteAddress = inlineAddress;
         break;
@@ -214,8 +85,28 @@ export const parseRawTaskText = (text) => {
     }
   }
 
+  const getNextResultValue = (index, expectedLabel = '') => {
+    const nextLine = lines[index + 1];
+    if (!nextLine) return '';
+
+    // Fix: If looking for 'Type', 'ADDRESS' is a valid value, not a label
+    if (normalize(expectedLabel) === 'type' && normalize(nextLine) === 'address') {
+      return nextLine;
+    }
+
+    if (
+      !isResultLabel(nextLine) &&
+      !isResultNumber(nextLine) &&
+      nextLine !== 'Result name/title is in unexpected language or script'
+    ) {
+      return nextLine;
+    }
+    return '';
+  };
+
   let currentResult = null;
 
+  // 4. Main Parsing Loop
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
@@ -225,10 +116,7 @@ export const parseRawTaskText = (text) => {
       currentResult = {
         number: line,
         title: lines[i + 1] || 'Unknown',
-        address:
-          normalize(taskData.taskType) === 'autocomplete' && line === '1.'
-            ? topAutocompleteAddress
-            : '',
+        address: '',
         category: '',
         type: '',
         status: '',
@@ -237,29 +125,48 @@ export const parseRawTaskText = (text) => {
         pinLatLng: '',
       };
 
-      const possibleSubtitle = lines[i + 2];
+      let subtitleLines = [];
+      let subtitleIndex = i + 2;
+      
+      const ignoredArtifacts = [
+        'directions', 'website', 'save', 'share'
+      ];
 
-      if (
-        possibleSubtitle &&
-        possibleSubtitle.includes('•') &&
-        !currentResult.address
+      // Extract floating text between Title and the first Field Label
+      while (
+        subtitleIndex < lines.length &&
+        !isResultLabel(lines[subtitleIndex]) &&
+        !isResultNumber(lines[subtitleIndex])
       ) {
-        const parts = possibleSubtitle.split('•').map((part) => part.trim());
-        currentResult.address = parts.slice(1).join(', ');
+        const text = lines[subtitleIndex];
+        if (!ignoredArtifacts.includes(normalize(text))) {
+          subtitleLines.push(text);
+        }
+        subtitleIndex++;
       }
 
+      // Process floating subtitle text
+      if (subtitleLines.length > 0) {
+        const subtitleText = subtitleLines.join(', ');
+        
+        if (subtitleText.includes('•')) {
+          const parts = subtitleText.split('•').map((part) => part.trim());
+          currentResult.category = parts[0] || '';
+          currentResult.address = parts.slice(1).join(', ');
+        } else {
+          currentResult.address = subtitleText;
+        }
+      }
+
+      // Advance loop index past the processed subtitle lines
+      i = subtitleIndex - 1; 
       continue;
     }
 
     if (!currentResult) continue;
 
-    if (line.includes('•') && !currentResult.address) {
-      const parts = line.split('•').map((part) => part.trim());
-      currentResult.address = parts.slice(1).join(', ');
-    }
-
+    // Address Processing
     const inlineAddress = getInlineValue(line, 'Address');
-
     if (normalize(line) === 'address' || inlineAddress) {
       if (inlineAddress) {
         currentResult.address = inlineAddress;
@@ -276,37 +183,118 @@ export const parseRawTaskText = (text) => {
           addrLines.push(lines[j]);
           j++;
         }
-
-        currentResult.address = addrLines.join(', ');
+        
+        const newAddress = addrLines.join(', ');
+        if (currentResult.address && newAddress) {
+           currentResult.address = `${currentResult.address}, ${newAddress}`;
+        } else if (newAddress) {
+           currentResult.address = newAddress;
+        }
+        
+        // Advance main loop index past the processed address lines
+        i = j - 1; 
       }
     }
 
-    if (normalize(line) === 'category') {
-      currentResult.category = getNextResultValue(i);
+    // Category Processing
+    const inlineCategory = getInlineValue(line, 'Category');
+    if (normalize(line) === 'category' || inlineCategory) {
+      if (inlineCategory) {
+        currentResult.category = inlineCategory === '-' ? '' : inlineCategory;
+      } else {
+        const val = getNextResultValue(i, 'category');
+        if (val) {
+          currentResult.category = val === '-' ? '' : val;
+          i++; 
+        }
+      }
     }
 
-    if (normalize(line) === 'type') {
-      currentResult.type = getNextResultValue(i);
+    // Type Processing
+    const inlineType = getInlineValue(line, 'Type');
+    if (normalize(line) === 'type' || inlineType) {
+      if (inlineType) {
+        currentResult.type = inlineType;
+      } else {
+        const val = getNextResultValue(i, 'type');
+        if (val) {
+          currentResult.type = val;
+          i++;
+        }
+      }
     }
 
-    if (normalize(line) === 'status') {
-      currentResult.status = getNextResultValue(i);
+    // Status Processing
+    const inlineStatus = getInlineValue(line, 'Status');
+    if (normalize(line) === 'status' || inlineStatus) {
+      if (inlineStatus) {
+        currentResult.status = inlineStatus;
+      } else {
+        const val = getNextResultValue(i, 'status');
+        if (val) {
+          currentResult.status = val;
+          i++;
+        }
+      }
     }
 
-    if (normalize(line) === 'distance to user') {
-      currentResult.distanceToUser = getNextResultValue(i);
+    // Distance to User Processing
+    const inlineDistUser = getInlineValue(line, 'Distance to User');
+    if (normalize(line) === 'distance to user' || inlineDistUser) {
+      if (inlineDistUser) {
+        currentResult.distanceToUser = inlineDistUser;
+      } else {
+        const val = getNextResultValue(i, 'distance to user');
+        if (val) {
+          currentResult.distanceToUser = val;
+          i++;
+        }
+      }
     }
 
-    if (normalize(line) === 'distance to viewport') {
-      currentResult.distanceToViewport = getNextResultValue(i);
+    // Distance to Viewport Processing
+    const inlineDistView = getInlineValue(line, 'Distance to Viewport');
+    if (normalize(line) === 'distance to viewport' || inlineDistView) {
+      if (inlineDistView) {
+        currentResult.distanceToViewport = inlineDistView;
+      } else {
+        const val = getNextResultValue(i, 'distance to viewport');
+        if (val) {
+          currentResult.distanceToViewport = val;
+          i++;
+        }
+      }
     }
 
-    if (normalize(line) === 'lat, lng') {
-      currentResult.pinLatLng = getNextResultValue(i);
+    // Coordinates Processing
+    const inlineLatLng = getInlineValue(line, 'Lat, Lng');
+    if (normalize(line) === 'lat, lng' || inlineLatLng) {
+      if (inlineLatLng) {
+        currentResult.pinLatLng = inlineLatLng;
+      } else {
+        const val = getNextResultValue(i, 'lat, lng');
+        if (val) {
+          currentResult.pinLatLng = val;
+          i++;
+        }
+      }
     }
   }
 
   if (currentResult) taskData.results.push(currentResult);
+
+  // 5. FINAL SWEEP: Apply Autocomplete Fallback SAFELY
+  if (
+    normalize(taskData.taskType) === 'autocomplete' &&
+    normalize(taskData.country) === 'india' &&
+    topAutocompleteAddress &&
+    taskData.results.length > 0
+  ) {
+    const firstResult = taskData.results[0];
+    if (normalize(firstResult.type) !== 'query' && !firstResult.address) {
+      firstResult.address = topAutocompleteAddress;
+    }
+  }
 
   return taskData;
 };
